@@ -1,0 +1,34 @@
+# Exclude large/unnecessary files from EAS upload
+
+# Node modules (EAS installs deps on the builder)
+node_modules
+
+# Expo local caches
+.expo
+.expo-shared
+
+# Build outputs
+web-build
+dist
+build
+
+# Logs and temp files
+*.log
+*.tmp
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+Thumbs.db
+
+# Git
+.git
+.github
+
+# Python/other envs and caches
+**/.venv
+**/__pycache__
+**/*.pyc
+
+# Project-specific heavy folders (outside RN app)
+/framework
