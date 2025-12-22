@@ -15,7 +15,7 @@ import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useNavigation } from '@react-navigation/native';
 
-const API_BASE_URL = 'https://grocery-c3c0.onrender.com/api';
+const API_BASE_URL = 'http://31.97.233.212:5000/api';
 
 export default function OffersScreen() {
   const navigation = useNavigation();

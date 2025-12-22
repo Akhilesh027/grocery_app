@@ -18,7 +18,7 @@ import axios from 'axios';
 
 const { width } = Dimensions.get('window');
 
-const API_BASE_URL = 'https://grocery-c3c0.onrender.com/api';
+const API_BASE_URL = 'http://31.97.233.212:5000/api';
 
 export default function CategoriesScreen() {
   const { selectedCategoryId, clearCategorySelection } = useCategoryNavigation();
@@ -252,12 +252,10 @@ export default function CategoriesScreen() {
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Shop by Category</Text>
         <View style={styles.headerIcons}>
-          <TouchableOpacity style={styles.iconButton}>
-            <Text style={styles.iconText}>🔍</Text>
-          </TouchableOpacity>
+         
           <TouchableOpacity 
             style={styles.cartButton}
-            onPress={() => navigation.navigate('Cart')}
+            onPress={() => navigation.navigate('cart')}
           >
             <Text style={styles.cartIcon}>🛒</Text>
             {getCartItemsCount() > 0 && (
@@ -502,8 +500,6 @@ export default function CategoriesScreen() {
     </View>
   );
 }
-
-// --- STYLES (Adjusted for Sidebar Image Placeholder) ---
 
 const styles = StyleSheet.create({
   container: {

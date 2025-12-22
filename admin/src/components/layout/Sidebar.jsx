@@ -59,6 +59,16 @@ const Sidebar = () => {
       path: '/notification',
     },
     {
+      text: 'Coupon Management',
+      icon: <OrdersIcon />,
+      path: '/coupon',
+    },
+     {
+      text: 'Referal management',
+      icon: <OrdersIcon />,
+      path: '/referal',
+    },
+    {
       text: 'Logistics & Delivery',
       icon: <LogisticsIcon />,
       children: [

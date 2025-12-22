@@ -34,7 +34,7 @@ import {
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_BASE_URL = 'https://grocery-c3c0.onrender.com/api';
+const API_BASE_URL = 'http://31.97.233.212:5000/api';
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 // Define colors properly
@@ -429,7 +429,7 @@ export default function OrdersScreen() {
                 <View style={styles.priceRow}>
                   <Text style={styles.priceLabel}>Items Total:</Text>
                   <Text style={styles.priceValue}>
-                    ₹{selectedOrder.subtotal?.toLocaleString()}
+                    ₹{selectedOrder.pricing.total?.toLocaleString()}
                   </Text>
                 </View>
                 {selectedOrder.discount > 0 && (
@@ -451,7 +451,7 @@ export default function OrdersScreen() {
                 <View style={[styles.priceRow, styles.totalRow]}>
                   <Text style={styles.totalLabel}>Total Amount:</Text>
                   <Text style={styles.totalValue}>
-                    ₹{selectedOrder.totalAmount?.toLocaleString()}
+                    ₹{selectedOrder.pricing.total?.toLocaleString()}
                   </Text>
                 </View>
               </View>
@@ -544,7 +544,7 @@ export default function OrdersScreen() {
 
       <View style={styles.orderFooter}>
         <View style={styles.orderTotal}>
-          <Text style={styles.totalLabel}>Total: ₹{order.totalAmount?.toLocaleString()}</Text>
+          <Text style={styles.totalLabel}>Total: ₹{order.pricing.total?.toLocaleString()}</Text>
           <Text style={styles.itemsCount}>{getTotalItems(order)} items</Text>
         </View>
 

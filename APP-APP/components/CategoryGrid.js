@@ -1,93 +1,102 @@
-import { 
-  View, 
-  Text, 
-  TouchableOpacity, 
-  StyleSheet, 
-  Image 
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Image,
+  Dimensions, // Import Dimensions for dynamic sizing
 } from 'react-native';
-import { useState } from 'react';
+
+import { useState, useEffect } from 'react';
+import axios from 'axios';
 import { useRouter } from 'expo-router';
 import { useCategoryNavigation } from '../context/CategoryNavigationContext';
-import { getCategoryByName } from '../data/categoryData';
-import VendorImageUpload from './VendorImageUpload';
+import VendorImageUpload from './VendorImageUpload'; // Assuming this path is correct
 
-export default function CategoryGrid({ 
+// Get screen width for dynamic sizing
+const { width } = Dimensions.get('window');
+// Define column count and margin for layout calculation
+const NUM_COLUMNS = 2;
+const CARD_MARGIN = 10;
+const CONTAINER_PADDING = 10;
+
+// Calculate the width of each card
+const CARD_WIDTH = (width - (2 * CONTAINER_PADDING) - ((NUM_COLUMNS - 1) * CARD_MARGIN)) / NUM_COLUMNS;
+
+
+export default function CategoryGrid({
   showVendorUpload = false,
-  currentVendorId = 'vendor1' 
+  currentVendorId = 'vendor1'
 }) {
   const router = useRouter();
-  const { navigateToCategory } = useCategoryNavigation();
+  // Assuming CategoryNavigationContext is still used for global state management
+  const { navigateToCategory } = useCategoryNavigation(); 
+
+  const [categories, setCategories] = useState([]);
   const [uploadModalVisible, setUploadModalVisible] = useState(false);
   const [selectedImageData, setSelectedImageData] = useState(null);
 
-  // Updated to show only 4 main categories for 2x2 grid
-  const [categories, setCategories] = useState([
-    {
-      id: '1',
-      name: 'Vegetables',
-      icon: '🥬',
-      image: 'https://images.pexels.com/photos/1327838/pexels-photo-1327838.jpeg?auto=compress&cs=tinysrgb&w=200',
-      itemCount: '50+',
-      vendorId: null,
-      color: '#E8F5E9'
-    },
-    {
-      id: '2',
-      name: 'Fruits',
-      icon: '🍎',
-      image: 'https://images.pexels.com/photos/1105166/pexels-photo-1105166.jpeg?auto=compress&cs=tinysrgb&w=200',
-      itemCount: '30+',
-      vendorId: null,
-      color: '#FFF3E0'
-    },
-    {
-      id: '5',
-      name: 'Cuts & Sprouts',
-      icon: '🥥',
-      image: 'https://images.pexels.com/photos/1414651/pexels-photo-1414651.jpeg?auto=compress&cs=tinysrgb&w=200',
-      itemCount: '25+',
-      vendorId: null,
-      color: '#E3F2FD'
-    },
-    {
-      id: '3',
-      name: 'Dairy',
-      icon: '🥛',
-      image: 'https://images.pexels.com/photos/416880/pexels-photo-416880.jpeg?auto=compress&cs=tinysrgb&w=200',
-      itemCount: '25+',
-      vendorId: null,
-      color: '#FCE4EC'
-    }
-  ]);
+  /**
+   * Fetches main categories and limits the result to the first 4.
+   */
+  const getCategories = async () => {
+    try {
+      const res = await axios.get("http://31.97.233.212:5000/api/categories");
 
+      // Filter only main categories
+      const mainCategories = res.data.filter(cat => cat.type === "main");
+
+      // Limit to the first 4 categories as requested
+      const fourCategories = mainCategories.slice(0, 4); 
+
+      setCategories(fourCategories);
+
+    } catch (err) {
+      console.log("Error fetching categories:", err);
+    }
+  };
+
+  useEffect(() => {
+    getCategories();
+  }, []);
+
+  /**
+   * Handles category press, navigating to the category page with the ID.
+   */
   const handleCategoryPress = (category) => {
-    // Try to find the full category data
-    const fullCategory = getCategoryByName(category.name);
-    if (fullCategory) {
-      // Set the category in context and navigate to categories tab
-      navigateToCategory(fullCategory.id);
-      router.push('/categories');
-    }
+    // 1. Update global context/state with the selected category ID (optional based on your app needs)
+    navigateToCategory(category._id); 
+        router.push({
+      pathname: "/SingleCategory", 
+      params: { categoryId: category._id } 
+    });
   };
 
+  /**
+   * Handles long press for vendor image upload (if enabled).
+   */
   const handleLongPress = (category) => {
-    if (showVendorUpload) {
-      setSelectedImageData({
-        categoryId: category.id,
-        categoryName: category.name,
-        currentImage: category.image,
-        productId: `category_${category.id}`
-      });
-      setUploadModalVisible(true);
-    }
+    if (!showVendorUpload) return;
+
+    setSelectedImageData({
+      categoryId: category._id,
+      categoryName: category.name,
+      currentImage: category.bannerImage,
+      productId: `category_${category._id}`
+    });
+
+    setUploadModalVisible(true);
   };
 
+  /**
+   * Updates the banner image locally after a successful upload.
+   */
   const handleImageUpdate = (updateData) => {
-    // Update category image locally
-    setCategories(prevCategories => 
-      prevCategories.map(cat => 
-        cat.id === updateData.productId.replace('category_', '') 
-          ? { ...cat, image: updateData.imageUrl, vendorId: updateData.vendorId }
+    setCategories(prev =>
+      prev.map(cat =>
+        // The productId is structured as 'category_ID', so we remove 'category_' to get the actual ID
+        cat._id === updateData.productId.replace("category_", "") 
+          ? { ...cat, bannerImage: updateData.imageUrl }
           : cat
       )
     );
@@ -96,31 +105,38 @@ export default function CategoryGrid({
   return (
     <View style={styles.container}>
       <View style={styles.grid}>
-        {categories.map((item) => (
-          <TouchableOpacity 
-            key={item.id} 
-            style={[styles.categoryCard, { backgroundColor: item.color }]}
-            onPress={() => handleCategoryPress(item)}
-            onLongPress={() => handleLongPress(item)}
-            delayLongPress={800}
-          >
-            <Image source={{ uri: item.image }} style={styles.categoryImage} />
-            <View style={styles.categoryInfo}>
-              <Text style={styles.categoryIcon}>{item.icon}</Text>
-              <Text style={styles.categoryName}>{item.name}</Text>
-              
-              
-              {/* Upload hint for vendors */}
-              {showVendorUpload && (
-                <View style={styles.uploadHint}>
-                  <Text style={styles.uploadHintText}>Hold to edit</Text>
-                </View>
-              )}
-            </View>
-          </TouchableOpacity>
-        ))}
+        {categories?.length > 0 ? (
+          categories.map((item) => (
+            <TouchableOpacity
+              key={item._id}
+              style={[styles.categoryCard]}
+              onPress={() => handleCategoryPress(item)}
+              onLongPress={() => handleLongPress(item)}
+              delayLongPress={800}
+            >
+              {/* Fallback image source if the URI is null/invalid */}
+              <Image 
+                source={{ uri: item.bannerImage }} 
+                style={styles.categoryImage} 
+              />
+
+              <View style={styles.categoryInfo}>
+                <Text style={styles.categoryName} numberOfLines={1}>{item.name}</Text>
+
+                {/* Show edit hint only when vendor upload mode is active */}
+                {showVendorUpload && (
+                  <View style={styles.uploadHint}>
+                    <Text style={styles.uploadHintText}>Hold to edit</Text>
+                  </View>
+                )}
+              </View>
+            </TouchableOpacity>
+          ))
+        ) : (
+          <Text style={{ textAlign: "center", padding: 20 }}>Loading...</Text>
+        )}
       </View>
-      
+
       {/* Vendor Image Upload Modal */}
       {selectedImageData && (
         <VendorImageUpload
@@ -140,103 +156,71 @@ export default function CategoryGrid({
   );
 }
 
+// ---
+// STYLESHEET FOR 2-COLUMN GRID
+// ---
+
 const styles = StyleSheet.create({
   container: {
-    paddingHorizontal: 20, // Same as BrandSpotlight
+    flex: 1,
+    padding: CONTAINER_PADDING,
+    backgroundColor: '#f8f8f8', // Light background for the page
   },
+
+  // Grid container set up for a 2-column wrapping layout
   grid: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 12, // Same gap as BrandSpotlight
-    justifyContent: 'space-between',
+    flexWrap: 'wrap', 
+    justifyContent: 'space-between', // Spacing between columns
   },
+
+  // Individual category card style
   categoryCard: {
-    width: '48%',
-    height: 120,
-    borderRadius: 20,
-    overflow: 'hidden',
-    position: 'relative',
-    marginBottom: 12,
+    width: CARD_WIDTH, // Calculated width for 2 columns
+    marginBottom: CARD_MARGIN, // Vertical spacing between rows
+    backgroundColor: '#fff',
+    borderRadius: 8,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 3 },
+    shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
-    shadowRadius: 6,
-    elevation: 4,
+    shadowRadius: 4,
+    elevation: 3, // Android shadow
+    overflow: 'hidden',
   },
+
+  // Image style
   categoryImage: {
-    width: 50,
-  
-    resizeMode: 'contain',
-    position: 'absolute',
-    right: 8,
-    bottom: 8,
-    opacity: 0.9,
+    width: '100%',
+    // Consistent aspect ratio (e.g., 4:3)
+    height: CARD_WIDTH * 0.75, 
+    resizeMode: 'cover',
   },
+
+  // Info section below the image
   categoryInfo: {
-    padding: 12,
-    flex: 1,
-    justifyContent: 'center',
+    padding: 10,
+    alignItems: 'center', // Center the text horizontally
   },
-  categoryIcon: {
-    fontSize: 36,
-    marginBottom: 8,
-  },
+
+  // Category name text
   categoryName: {
     fontSize: 14,
-    fontWeight: '700',
-    color: '#111827',
-    textAlign: 'left',
-    letterSpacing: 0,
+    fontWeight: '600',
+    color: '#333',
+    textAlign: 'center',
+    marginTop: 5,
   },
-  selectedCategoryCard: {
-    borderWidth: 3,
-    borderColor: '#FF9933',
-    transform: [{ scale: 0.95 }],
-  },
-  selectionIndicator: {
-    position: 'absolute',
-    top: 4,
-    right: 4,
-    backgroundColor: '#FF9933',
-    borderRadius: 12,
-    width: 24,
-    height: 24,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  checkIcon: {
-    color: '#FFFFFF',
-    fontSize: 14,
-    fontWeight: 'bold',
-  },
-  vendorIndicator: {
-    position: 'absolute',
-    top: 4,
-    left: 4,
-    backgroundColor: '#F59E0B',
-    borderRadius: 10,
-    width: 20,
-    height: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  vendorText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: 'bold',
-  },
+
+  // Styles for the "Hold to edit" hint
   uploadHint: {
-    position: 'absolute',
-    bottom: 4,
-    right: 4,
-    backgroundColor: 'rgba(0, 0, 0, 0.6)',
-    paddingHorizontal: 4,
+    marginTop: 5,
     paddingVertical: 2,
+    paddingHorizontal: 5,
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
     borderRadius: 4,
   },
   uploadHintText: {
-    color: '#FFFFFF',
-    fontSize: 8,
-    fontWeight: '500',
+    fontSize: 10,
+    color: '#666',
   },
 });

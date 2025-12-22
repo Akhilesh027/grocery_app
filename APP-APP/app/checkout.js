@@ -12,21 +12,21 @@ import {
   Platform,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { ArrowLeft, MapPin, Check, X, Coins } from 'lucide-react-native';
-import { useRouter } from 'expo-router';
+import { ArrowLeft, MapPin, Check, X, Coins, Wallet } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// ---------- CONFIG ----------
-const API_BASE_URL = 'https://grocery-c3c0.onrender.com/api';
+const API_BASE_URL = 'http://31.97.233.212:5000/api';
 
 const COLORS = {
   primary: '#00A86B',
   success: '#059669',
   error: '#DC2626',
+  warning: '#F59E0B',
   background: '#F9FAFB',
   surface: '#FFFFFF',
   text: { primary: '#111827', secondary: '#6B7280', light: '#9CA3AF' },
   border: '#E5E7EB',
+  wallet: '#8B5CF6',
 };
 
 // ---------- UTILITIES ----------
@@ -59,6 +59,38 @@ const getItemImage = (item) => {
   if (item.product?.images?.[0]) return item.product.images[0];
   if (item.images?.[0]) return item.images[0];
   return "https://via.placeholder.com/100x100?text=No+Image";
+};
+
+// Check if a product is a 1rs offer product
+const is1RsOfferProduct = (product) => {
+  if (!product) return false;
+  
+  // Check if product has offerCategory with name "1rs"
+  if (product.category?.offerCategory?.name === '1rs') {
+    return true;
+  }
+  
+  // Also check if product price is 1 (as fallback)
+  const price = getItemPrice(product);
+  return price === 1 || price === '1';
+};
+
+// Extract 1rs offer products from cart
+const get1RsOfferProducts = (cartItems) => {
+  return cartItems.filter(item => {
+    const product = item.productId || item;
+    return is1RsOfferProduct(product);
+  });
+};
+
+// Get product IDs from cart items
+const getProductIdsFromCart = (cartItems) => {
+  return cartItems.map(item => {
+    if (item.productId?._id) return item.productId._id;
+    if (item.productId?.id) return item.productId.id;
+    if (item._id) return item._id;
+    return null;
+  }).filter(id => id !== null);
 };
 
 // ---------- API SERVICE ----------
@@ -99,6 +131,66 @@ const api = {
       throw error;
     }
   },
+  
+// In your frontend API service (api object)
+checkOfferPurchaseEligibility: async (productIds) => {
+  try {
+    // First get the user ID
+    const userData = await AsyncStorage.getItem('user');
+    if (!userData) {
+      return { eligible: true, restrictedProducts: [], message: '' };
+    }
+    
+    const user = JSON.parse(userData);
+    const userId = user.id;
+    
+    if (!userId) {
+      return { eligible: true, restrictedProducts: [], message: '' };
+    }
+
+    const data = await api.request(`/orders/check-offer-eligibility/${userId}`, {
+      method: 'POST',
+      body: { productIds }
+    });
+    
+    return {
+      eligible: data.eligible || true,
+      restrictedProducts: data.restrictedProducts || [],
+      message: data.message || ''
+    };
+  } catch (error) {
+    console.error('Offer eligibility check error:', error);
+    return { eligible: true, restrictedProducts: [], message: '' };
+  }
+},
+
+getOfferPurchaseHistory: async () => {
+  try {
+    // First get the user ID
+    const userData = await AsyncStorage.getItem('user');
+    if (!userData) {
+      return { purchasedOffers: [], lastPurchaseDate: null, canPurchase: true };
+    }
+    
+    const user = JSON.parse(userData);
+    const userId = user.id;
+    
+    if (!userId) {
+      return { purchasedOffers: [], lastPurchaseDate: null, canPurchase: true };
+    }
+
+    const data = await api.request(`/orders/offer-purchase-history/${userId}`);
+    
+    return {
+      purchasedOffers: data.purchasedOffers || [],
+      lastPurchaseDate: data.lastPurchaseDate,
+      canPurchase: data.canPurchase || true
+    };
+  } catch (error) {
+    console.error('Get offer purchase history error:', error);
+    return { purchasedOffers: [], lastPurchaseDate: null, canPurchase: true };
+  }
+},
 
   checkPincode: async (pincode) => {
     try {
@@ -125,15 +217,29 @@ const api = {
     method: 'DELETE' 
   }),
   
+  getAvailableCoupons: async () => api.request('/coupons/available'),
+  
   validateCoupon: async (couponCode, subtotal) =>
     api.request('/coupon/validate', { 
       method: 'POST', 
       body: { couponCode, subtotal } 
     }),
   
-  getUserReferrals: async () => api.request('/referrals/user'),
+  getUserLoyaltyCoins: async () => {
+    try {
+      const data = await api.request('/referrals/user');
+      return {
+        loyaltyCoins: data?.user?.loyaltyCoins || 0,
+        totalEarned: data?.totalEarned || 0,
+        completed: data?.completed || 0
+      };
+    } catch (error) {
+      console.error('Get loyalty coins error:', error);
+      return { loyaltyCoins: 0, totalEarned: 0, completed: 0 };
+    }
+  },
   
-  useReferralCoins: async (coinsToUse, orderId) =>
+  useWalletCoins: async (coinsToUse, orderId) =>
     api.request('/referrals/use-coins', { 
       method: 'POST', 
       body: { coinsToUse, orderId } 
@@ -155,7 +261,7 @@ const PAYMENT_METHODS = [
   { id: 'upi', name: 'UPI', icon: '📱', description: 'Pay with UPI, PhonePe, Google Pay' },
   { id: 'card', name: 'Credit/Debit Card', icon: '💳', description: 'Pay with Visa, Mastercard, RuPay' },
   { id: 'cod', name: 'Cash on Delivery', icon: '💰', description: 'Pay when you receive your order' },
-  { id: 'wallet', name: 'Wallet', icon: '💵', description: 'Pay with Paytm, PhonePe Wallet' },
+  { id: 'wallet', name: 'Wallet', icon: '💵', description: 'Pay using your loyalty coins' },
 ];
 
 const ADDRESS_TYPES = ['Home', 'Work', 'Other'];
@@ -176,7 +282,6 @@ const INITIAL_ADDRESS = {
 // ---------- COMPONENT ----------
 export default function CheckoutScreen() {
   const navigation = useNavigation();
-  const router = useRouter();
   const route = useRoute();
   const cartItems = route.params?.cartItems || [];
 
@@ -185,35 +290,44 @@ export default function CheckoutScreen() {
   const [selectedAddressId, setSelectedAddressId] = useState(null);
   const [loadingAddresses, setLoadingAddresses] = useState(false);
   const [deletingAddressId, setDeletingAddressId] = useState(null);
-
   const [showAddressModal, setShowAddressModal] = useState(false);
   const [newAddress, setNewAddress] = useState(INITIAL_ADDRESS);
   const [addressErrors, setAddressErrors] = useState({});
-
   const [pincodeInput, setPincodeInput] = useState('');
   const [checkingPincode, setCheckingPincode] = useState(false);
   const [deliveryAvailable, setDeliveryAvailable] = useState(null);
   const [deliveryMessage, setDeliveryMessage] = useState('');
-
   const [couponCode, setCouponCode] = useState('');
   const [appliedCoupon, setAppliedCoupon] = useState(null);
   const [availableCoupons, setAvailableCoupons] = useState([]);
   const [validatingCoupon, setValidatingCoupon] = useState(false);
-
-  // Referral State
-  const [referralData, setReferralData] = useState(null);
-  const [loadingReferrals, setLoadingReferrals] = useState(false);
-  const [coinsToUse, setCoinsToUse] = useState(0);
-  const [maxCoinsToUse, setMaxCoinsToUse] = useState(0);
-  const [usingCoins, setUsingCoins] = useState(false);
-
+  const [loadingCoupons, setLoadingCoupons] = useState(false);
+  
+  // Loyalty Coins & Wallet State
+  const [loyaltyCoins, setLoyaltyCoins] = useState(0);
+  const [loadingCoins, setLoadingCoins] = useState(false);
+  const [walletBalance, setWalletBalance] = useState(0);
   const [selectedPayment, setSelectedPayment] = useState('upi');
   const [selectedSlot, setSelectedSlot] = useState('morning');
-
+  const [useWalletBalance, setUseWalletBalance] = useState(false);
+  const [walletDiscount, setWalletDiscount] = useState(0);
   const [placingOrder, setPlacingOrder] = useState(false);
-const [deliveryTime, setDeliveryTime] = useState('');
+  const [deliveryTime, setDeliveryTime] = useState('');
+  
+  // Offer Product Restriction State
+  const [checkingOfferEligibility, setCheckingOfferEligibility] = useState(false);
+  const [offerEligibility, setOfferEligibility] = useState({
+    eligible: true,
+    restrictedProducts: [],
+    message: ''
+  });
+  const [offerPurchaseHistory, setOfferPurchaseHistory] = useState({
+    purchasedOffers: [],
+    lastPurchaseDate: null,
+    canPurchase: true
+  });
 
-  // Derived calculations with safe data access
+  // Derived calculations
   const subtotal = useMemo(() => {
     return cartItems.reduce((sum, item) => {
       const price = getItemPrice(item);
@@ -224,30 +338,69 @@ const [deliveryTime, setDeliveryTime] = useState('');
 
   const baseDiscount = Math.round(subtotal * 0.1);
   const couponDiscount = appliedCoupon?.discount || 0;
-  const referralDiscount = coinsToUse > 0 ? (coinsToUse / 10) : 0;
   const deliveryFee = deliveryAvailable ? (subtotal > 500 ? 0 : 40) : 0;
-  const total = Math.max(0, subtotal - baseDiscount - couponDiscount - referralDiscount + deliveryFee);
+  
+  // Calculate wallet discount
+  const calculatedWalletDiscount = useMemo(() => {
+    if (selectedPayment !== 'wallet' || !useWalletBalance || walletBalance <= 0) {
+      return 0;
+    }
+    
+    const totalBeforeWallet = subtotal - baseDiscount - couponDiscount + deliveryFee;
+    const maxWalletDiscount = Math.min(walletBalance, totalBeforeWallet);
+    
+    return Math.floor(maxWalletDiscount);
+  }, [selectedPayment, useWalletBalance, walletBalance, subtotal, baseDiscount, couponDiscount, deliveryFee]);
+
+  // Calculate coins needed
+  const coinsNeeded = useMemo(() => {
+    if (calculatedWalletDiscount <= 0) return 0;
+    return calculatedWalletDiscount * 100;
+  }, [calculatedWalletDiscount]);
+
+  // Calculate final total
+  const total = useMemo(() => {
+    const walletDiscount = selectedPayment === 'wallet' && useWalletBalance ? calculatedWalletDiscount : 0;
+    return Math.max(0, subtotal - baseDiscount - couponDiscount - walletDiscount + deliveryFee);
+  }, [subtotal, baseDiscount, couponDiscount, deliveryFee, selectedPayment, useWalletBalance, calculatedWalletDiscount]);
+
   const coinsEarned = Math.round(total / 20);
+
+  // Get 1rs offer products in cart
+  const offerProducts = useMemo(() => get1RsOfferProducts(cartItems), [cartItems]);
+  const hasRestrictedProducts = offerEligibility.restrictedProducts.length > 0;
+  const productIds = useMemo(() => getProductIdsFromCart(cartItems), [cartItems]);
 
   // ---------- LIFECYCLE ----------
   useEffect(() => {
     (async () => {
       await loadAddresses();
-      await loadReferralData();
-      computeAvailableCoupons();
+      await loadLoyaltyCoins();
+      await loadAvailableCoupons();
+      await loadOfferPurchaseHistory();
+      await checkOfferEligibility(); // Check eligibility on load
     })();
   }, []);
 
   useEffect(() => {
-    const maxUsable = Math.min(
-      referralData?.user?.loyaltyCoins || 0,
-      Math.floor((subtotal - baseDiscount - couponDiscount) * 10)
-    );
-    setMaxCoinsToUse(maxUsable);
-    if (coinsToUse > maxUsable) {
-      setCoinsToUse(maxUsable);
+    if (selectedPayment === 'wallet') {
+      setUseWalletBalance(true);
+    } else {
+      setUseWalletBalance(false);
     }
-  }, [subtotal, baseDiscount, couponDiscount, referralData]);
+  }, [selectedPayment]);
+
+  useEffect(() => {
+    const newWalletBalance = loyaltyCoins / 100;
+    setWalletBalance(newWalletBalance);
+  }, [loyaltyCoins]);
+
+  // Check offer eligibility when cart changes
+  useEffect(() => {
+    if (productIds.length > 0 && offerProducts.length > 0) {
+      checkOfferEligibility();
+    }
+  }, [productIds, offerProducts.length]);
 
   // ---------- HELPERS ----------
   const getUserId = async () => {
@@ -283,26 +436,86 @@ const [deliveryTime, setDeliveryTime] = useState('');
     }
   }
 
-  async function loadReferralData() {
+  async function loadLoyaltyCoins() {
     try {
-      setLoadingReferrals(true);
-      const data = await api.getUserReferrals();
-      setReferralData(data);
+      setLoadingCoins(true);
+      
+      const cachedCoins = await AsyncStorage.getItem('loyaltyCoins');
+      if (cachedCoins) {
+        setLoyaltyCoins(parseInt(cachedCoins) || 0);
+      }
+      
+      const data = await api.getUserLoyaltyCoins();
+      const coins = data.loyaltyCoins || 0;
+      
+      setLoyaltyCoins(coins);
+      await AsyncStorage.setItem('loyaltyCoins', coins.toString());
+      
+      console.log('Loaded loyalty coins:', coins);
     } catch (err) {
-      console.warn('Load referrals failed:', err.message);
-      // Don't show alert for referrals as it's not critical
+      console.warn('Load loyalty coins failed:', err.message);
     } finally {
-      setLoadingReferrals(false);
+      setLoadingCoins(false);
     }
   }
 
-  function computeAvailableCoupons() {
-    const coupons = [];
-    if (subtotal >= 2000) coupons.push({ code: 'SAVE200', discount: 200, description: '₹200 off on orders above ₹2000', minAmount: 2000 });
-    if (subtotal >= 1000) coupons.push({ code: 'SAVE100', discount: 100, description: '₹100 off on orders above ₹1000', minAmount: 1000 });
-    coupons.push({ code: 'FIRST1', discount: Math.max(0, subtotal - 1), description: "First order for just ₹1", minAmount: 1 });
-    setAvailableCoupons(coupons);
+  async function loadAvailableCoupons() {
+    try {
+      setLoadingCoupons(true);
+      const coupons = await api.getAvailableCoupons();
+      
+      const now = new Date();
+      const validCoupons = coupons.filter(coupon => {
+        if (!coupon.active) return false;
+        if (coupon.minOrder && subtotal < coupon.minOrder) return false;
+        return true;
+      });
+      
+      setAvailableCoupons(validCoupons);
+    } catch (err) {
+      console.warn('Load coupons failed:', err.message);
+      setAvailableCoupons([]);
+    } finally {
+      setLoadingCoupons(false);
+    }
   }
+
+  // ---------- OFFER ELIGIBILITY ----------
+  const checkOfferEligibility = async () => {
+    try {
+      if (productIds.length === 0) return true;
+      
+      setCheckingOfferEligibility(true);
+      const eligibilityResult = await api.checkOfferPurchaseEligibility(productIds);
+      
+      setOfferEligibility(eligibilityResult);
+      
+      return eligibilityResult.eligible;
+    } catch (error) {
+      console.error('Offer eligibility check error:', error);
+      return true; // Fail-safe: allow purchase if API fails
+    } finally {
+      setCheckingOfferEligibility(false);
+    }
+  };
+
+  const loadOfferPurchaseHistory = async () => {
+    try {
+      const history = await api.getOfferPurchaseHistory();
+      setOfferPurchaseHistory(history);
+    } catch (error) {
+      console.error('Failed to load offer purchase history:', error);
+    }
+  };
+
+  const updateLocalCoins = async (newCoins) => {
+    try {
+      await AsyncStorage.setItem('loyaltyCoins', newCoins.toString());
+      setLoyaltyCoins(newCoins);
+    } catch (error) {
+      console.error('Failed to update local coins:', error);
+    }
+  };
 
   // ---------- PINCODE VALIDATION ----------
   const validatePincode = (pincode) => {
@@ -314,43 +527,38 @@ const [deliveryTime, setDeliveryTime] = useState('');
     }
     return '';
   };
-const checkPincode = async () => {
-  const pincodeError = validatePincode(pincodeInput);
-  if (pincodeError) {
-    Alert.alert('Invalid Pincode', pincodeError);
-    return;
-  }
-
-  try {
-    setCheckingPincode(true);
-
-    const result = await api.checkPincode(pincodeInput);
-
-    setDeliveryAvailable(result.deliverable);
-    setDeliveryMessage(result.message);
-    setNewAddress((s) => ({ ...s, pincode: pincodeInput }));
-
-    if (result.deliverable) {
-      // ⭐ DIRECTLY USE STORED DELIVERY TIME FROM BACKEND
-      setDeliveryTime(result.zone?.deliveryTime || "");
-
-      Alert.alert(
-        'Delivery Available',
-        `${result.message}\nDelivery Time: ${result.zone?.deliveryTime}`
-      );
-    } else {
-      setDeliveryTime("");
-      Alert.alert('Delivery Unavailable', result.message);
+  
+  const checkPincode = async () => {
+    const pincodeError = validatePincode(pincodeInput);
+    if (pincodeError) {
+      Alert.alert('Invalid Pincode', pincodeError);
+      return;
     }
 
-  } catch (e) {
-    Alert.alert('Error', 'Failed to check pincode availability');
-  } finally {
-    setCheckingPincode(false);
-  }
-};
+    try {
+      setCheckingPincode(true);
+      const result = await api.checkPincode(pincodeInput);
 
+      setDeliveryAvailable(result.deliverable);
+      setDeliveryMessage(result.message);
+      setNewAddress((s) => ({ ...s, pincode: pincodeInput }));
 
+      if (result.deliverable) {
+        setDeliveryTime(result.zone?.deliveryTime || "");
+        Alert.alert(
+          'Delivery Available',
+          `${result.message}\nDelivery Time: ${result.zone?.deliveryTime}`
+        );
+      } else {
+        setDeliveryTime("");
+        Alert.alert('Delivery Unavailable', result.message);
+      }
+    } catch (e) {
+      Alert.alert('Error', 'Failed to check pincode availability');
+    } finally {
+      setCheckingPincode(false);
+    }
+  };
 
   // ---------- ADDRESS VALIDATION ----------
   const validateAddressField = (field, value) => {
@@ -378,7 +586,6 @@ const checkPincode = async () => {
         break;
         
       case 'pincode':
-        // REMOVED PINCODE VALIDATION - only check if field exists
         if (!value?.trim()) {
           errors.pincode = 'Pincode is required';
         } else {
@@ -413,7 +620,6 @@ const checkPincode = async () => {
   };
 
   const validateAddressForm = () => {
-    // Validate all required fields
     const fieldsToValidate = ['fullName', 'mobile', 'pincode', 'address', 'city'];
     let isValid = true;
     
@@ -436,13 +642,12 @@ const checkPincode = async () => {
     if (!validateAddressForm()) return;
     
     try {
-      // REMOVED PINCODE DELIVERY CHECK - save address regardless of delivery availability
       const saved = await api.saveAddress(newAddress);
       const final = saved.address || saved;
       
       setAddresses((prev) => [...prev, final]);
       setSelectedAddressId(final._id || final.id || null);
-      setDeliveryAvailable(true); // Assume delivery is available when address is saved
+      setDeliveryAvailable(true);
       setNewAddress(INITIAL_ADDRESS);
       setAddressErrors({});
       setShowAddressModal(false);
@@ -487,6 +692,7 @@ const checkPincode = async () => {
   // ---------- COUPON ----------
   const applyCoupon = async (code) => {
     const input = (code || couponCode || '').trim();
+
     if (!input) {
       Alert.alert('Enter Coupon', 'Please enter a coupon code');
       return;
@@ -495,19 +701,29 @@ const checkPincode = async () => {
     try {
       setValidatingCoupon(true);
       const res = await api.validateCoupon(input, subtotal);
-      
+
       if (res && res.valid) {
-        setAppliedCoupon({ 
-          code: input, 
-          discount: res.discount, 
-          description: res.description 
+        if (res.minOrder && subtotal < res.minOrder) {
+          Alert.alert(
+            'Coupon Not Applicable',
+            `This coupon requires a minimum order of ₹${res.minOrder}`
+          );
+          return;
+        }
+
+        setAppliedCoupon({
+          code: input,
+          discount: res.discount,
+          type: res.type,
+          description: res.description,
         });
+
         Alert.alert('Coupon Applied', res.description || 'Coupon applied successfully');
       } else {
-        Alert.alert('Invalid Coupon', res.message || 'This coupon cannot be applied to your order');
+        Alert.alert('Invalid Coupon', res?.message || 'This coupon cannot be applied to your order');
       }
     } catch (err) {
-      Alert.alert('Error', err.message || 'Failed to validate coupon');
+      Alert.alert('Error', err?.message || 'Failed to validate coupon');
     } finally {
       setValidatingCoupon(false);
     }
@@ -518,71 +734,83 @@ const checkPincode = async () => {
     setCouponCode('');
   };
 
-  // ---------- REFERRAL COINS HANDLING ----------
-  const handleCoinsChange = (value) => {
-    const numValue = parseInt(value) || 0;
-    if (numValue <= maxCoinsToUse) {
-      setCoinsToUse(numValue);
+  const formatCouponDiscount = (coupon) => {
+    if (coupon.type === 'percentage') {
+      return `${coupon.value}% off`;
+    } else {
+      return `₹${coupon.value} off`;
     }
   };
 
-  const useMaxCoins = () => {
-    setCoinsToUse(maxCoinsToUse);
+  const formatCouponMinOrder = (coupon) => {
+    if (coupon.minOrder) {
+      return `Min order: ₹${coupon.minOrder}`;
+    }
+    return 'No minimum order';
   };
 
-  const removeCoins = () => {
-    setCoinsToUse(0);
-  };
-
-  const useReferralCoins = async (orderId) => {
-    if (coinsToUse <= 0) return true;
+  // ---------- WALLET VALIDATION ----------
+  const validateWalletPayment = () => {
+    if (selectedPayment !== 'wallet') return true;
     
-    try {
-      setUsingCoins(true);
-      const response = await api.useReferralCoins(coinsToUse, orderId);
-      
-      if (response.success) {
-        setReferralData(prev => ({
-          ...prev,
-          user: {
-            ...prev?.user,
-            loyaltyCoins: (prev?.user?.loyaltyCoins || 0) - coinsToUse
-          }
-        }));
-        return true;
-      } else {
-        Alert.alert('Error', response.message || 'Failed to use referral coins');
-        return false;
-      }
-    } catch (err) {
-      Alert.alert('Error', err.message || 'Failed to use referral coins');
+    if (!useWalletBalance) {
+      Alert.alert('Wallet Payment', 'Please enable wallet balance usage');
       return false;
-    } finally {
-      setUsingCoins(false);
     }
+    
+    if (loyaltyCoins <= 0) {
+      Alert.alert('Insufficient Coins', 'You don\'t have any loyalty coins in your wallet');
+      return false;
+    }
+    
+    if (coinsNeeded > loyaltyCoins) {
+      Alert.alert('Insufficient Coins', `You need ${coinsNeeded} coins but only have ${loyaltyCoins}`);
+      return false;
+    }
+    
+    return true;
   };
 
   // ---------- PLACE ORDER ----------
-  const validateOrder = () => {
+  const validateOrder = async () => {
+    // Check 1rs offer product restriction first
+    if (offerProducts.length > 0 && !offerEligibility.eligible) {
+      Alert.alert(
+        'Offer Product Restriction',
+        'You cannot purchase 1rs offer products as you have already purchased them this month.',
+        [
+          { text: 'OK', style: 'default' }
+        ]
+      );
+      return false;
+    }
+    
     if (!selectedAddressId) {
       Alert.alert('Select Address', 'Please select a delivery address');
       return false;
     }
-    // REMOVED deliveryAvailable check - allow order placement even if delivery status is unknown
+    
+    if (!validateWalletPayment()) {
+      return false;
+    }
+    
     if (selectedPayment === 'cod' && total > 5000) {
       Alert.alert('COD Limit Exceeded', 'Cash on Delivery is not available for orders above ₹5000');
       return false;
     }
+    
     if (cartItems.length === 0) {
       Alert.alert('Empty Cart', 'Your cart is empty');
       return false;
     }
+    
     return true;
   };
 
-  
   const placeOrder = async () => {
-    if (!validateOrder()) return;
+    // First validate order (including offer product check)
+    const isValid = await validateOrder();
+    if (!isValid) return;
     
     try {
       setPlacingOrder(true);
@@ -592,7 +820,7 @@ const checkPincode = async () => {
         throw new Error('Selected address not found');
       }
 
-      // Prepare order data WITHOUT referral coins initially
+      // Prepare order data
       const orderData = {
         items: cartItems.map(item => ({
           productId: item.productId?._id || item.productId?.id || item._id,
@@ -605,50 +833,53 @@ const checkPincode = async () => {
         paymentMethod: selectedPayment,
         deliverySlot: TIME_SLOTS.find(slot => slot.id === selectedSlot)?.time,
         coupon: appliedCoupon || undefined,
-        referralCoinsUsed: 0, // Start with 0
         subtotal: subtotal,
-        discount: baseDiscount + couponDiscount, // No referral discount yet
+        discount: baseDiscount + couponDiscount,
         deliveryFee: deliveryFee,
-        total: total - referralDiscount, // Include referral discount in calculation
+        total: total + (selectedPayment === 'wallet' && useWalletBalance ? calculatedWalletDiscount : 0),
         coinsEarned: coinsEarned,
       };
 
-      // 1. Place order first
+      // Place order
       const res = await api.placeOrder(orderData);
       
       if (res.success) {
-        // 2. If coins were selected to use, apply them after order creation
-        let coinsApplied = false;
-        if (coinsToUse > 0) {
+        // Apply wallet coins if used
+        let walletApplied = false;
+        if (selectedPayment === 'wallet' && useWalletBalance && coinsNeeded > 0) {
           try {
-            const coinsResult = await api.useReferralCoins(coinsToUse, res.orderId);
-            coinsApplied = coinsResult.success;
+            const coinsResult = await api.useWalletCoins(coinsNeeded, res.orderId);
+            
+            if (coinsResult.success) {
+              walletApplied = true;
+              const newCoinsBalance = loyaltyCoins - coinsNeeded;
+              await updateLocalCoins(newCoinsBalance);
+            }
           } catch (coinsError) {
-            console.warn('Failed to apply referral coins:', coinsError);
-            // Continue even if coins application fails
+            console.warn('Failed to apply wallet coins:', coinsError);
           }
         }
 
-        // Prepare success data for navigation
-        const orderSuccessData = {
+        // Navigate to success page
+        navigation.navigate('OrderSuccess', {
           orderId: res.orderId,
-          total: res.total,
-          coinsEarned: res.coinsEarned,
-          coinsUsed: coinsApplied ? coinsToUse : 0,
-          referralDiscount: coinsApplied ? referralDiscount : 0,
+          total: walletApplied ? total : res.total,
           paymentMethod: selectedPayment,
           deliverySlot: TIME_SLOTS.find(slot => slot.id === selectedSlot)?.time,
           address: addressObj,
-          items: cartItems
-        };
+          items: cartItems,
+          deliveryTime: deliveryTime,
+          walletUsed: walletApplied ? {
+            coinsUsed: coinsNeeded,
+            amount: calculatedWalletDiscount,
+            remainingCoins: loyaltyCoins - coinsNeeded
+          } : undefined,
+        });
 
         // Reset state
-        setCoinsToUse(0);
         setAppliedCoupon(null);
         setCouponCode('');
-
-        // Navigate to Order Success page
-        navigation.navigate('OrderSuccess', orderSuccessData);
+        setUseWalletBalance(false);
 
       } else {
         throw new Error(res.message || 'Failed to place order');
@@ -661,8 +892,6 @@ const checkPincode = async () => {
       setPlacingOrder(false);
     }
   };
-
-
 
   // ---------- RENDERERS ----------
   const renderHeader = () => (
@@ -710,29 +939,28 @@ const checkPincode = async () => {
       {pincodeInput && !validators.pincode(pincodeInput) && (
         <Text style={styles.errorText}>Please enter a valid 6-digit pincode</Text>
       )}
-   {deliveryAvailable !== null && (
-  <View style={{ marginTop: 10 }}>
-    <Text style={{ 
-      color: deliveryAvailable ? COLORS.success : COLORS.error, 
-      fontSize: 14,
-      fontWeight: "500"
-    }}>
-      {deliveryMessage}
-    </Text>
+      {deliveryAvailable !== null && (
+        <View style={{ marginTop: 10 }}>
+          <Text style={{ 
+            color: deliveryAvailable ? COLORS.success : COLORS.error, 
+            fontSize: 14,
+            fontWeight: "500"
+          }}>
+            {deliveryMessage}
+          </Text>
 
-    {deliveryAvailable && deliveryTime ? (
-      <Text style={{ 
-        color: COLORS.primary,
-        fontSize: 15,
-        fontWeight: "600",
-        marginTop: 3,
-      }}>
-        🚚 Estimated Delivery: {deliveryTime}
-      </Text>
-    ) : null}
-  </View>
-)}
-
+          {deliveryAvailable && deliveryTime ? (
+            <Text style={{ 
+              color: COLORS.primary,
+              fontSize: 15,
+              fontWeight: "600",
+              marginTop: 3,
+            }}>
+              🚚 Estimated Delivery: {deliveryTime}
+            </Text>
+          ) : null}
+        </View>
+      )}
     </View>
   );
 
@@ -763,7 +991,7 @@ const checkPincode = async () => {
               ]} 
               onPress={() => { 
                 setSelectedAddressId(aid); 
-                setDeliveryAvailable(true); // Assume delivery is available when address is selected
+                setDeliveryAvailable(true);
               }}
             >
               <View style={styles.addressHeader}>
@@ -808,265 +1036,329 @@ const checkPincode = async () => {
     </View>
   );
 
-const renderOrderSummary = () => (
-  <View style={styles.section}>
-    <Text style={styles.sectionTitle}>Order Summary</Text>
-    {cartItems.map((item, index) => {
-      const price = getItemPrice(item);
-      const quantity = item.quantity || 1;
-      const title = getItemTitle(item);
-      
-      return (
-        <View 
-          key={item._id || `${item.productId?._id || index}-${Math.random()}`} 
-          style={styles.itemRow}
-        >
-          <Text style={styles.itemName}>{title} × {quantity}</Text>
-          <Text style={styles.itemPrice}>{formatPrice(price * quantity)}</Text>
-        </View>
-      );
-    })}
-    <View style={styles.divider} />
-    <View style={styles.summaryRow}>
-      <Text style={styles.summaryLabel}>Subtotal</Text>
-      <Text style={styles.summaryValue}>{formatPrice(subtotal)}</Text>
-    </View>
-    <View style={styles.summaryRow}>
-      <Text style={styles.summaryLabel}>Discount (10%)</Text>
-      <Text style={[styles.summaryValue, styles.discountText]}>
-        -{formatPrice(baseDiscount)}
-      </Text>
-    </View>
-    {appliedCoupon && (
-      <View style={styles.summaryRow}>
-        <Text style={styles.summaryLabel}>Coupon ({appliedCoupon.code})</Text>
-        <Text style={[styles.summaryValue, styles.discountText]}>
-          -{formatPrice(appliedCoupon.discount)}
+  const renderOfferProductWarning = () => {
+    if (offerProducts.length === 0) return null;
+    
+    return (
+      <View style={styles.offerWarningSection}>
+        <Text style={styles.offerWarningTitle}>
+          ⚠️ 1rs Offer Products ({offerProducts.length} item{offerProducts.length > 1 ? 's' : ''})
         </Text>
-      </View>
-    )}
-    {coinsToUse > 0 && (
-      <View style={styles.summaryRow}>
-        <Text style={styles.summaryLabel}>Referral Coins</Text>
-        <Text style={[styles.summaryValue, styles.discountText]}>
-          -{formatPrice(referralDiscount)}
-        </Text>
-      </View>
-    )}
-    <View style={styles.summaryRow}>
-      <Text style={styles.summaryLabel}>Delivery Fee</Text>
-      <Text style={styles.summaryValue}>
-        {deliveryFee === 0 ? 'FREE' : formatPrice(deliveryFee)}
-      </Text>
-    </View>
-    <View style={[styles.summaryRow, styles.totalRow]}>
-      <Text style={styles.totalLabel}>Total</Text>
-      <Text style={styles.totalValue}>{formatPrice(total)}</Text>
-    </View>
-    {coinsEarned > 0 && (
-      <Text style={styles.coinsText}>
-        🪙 You'll earn {coinsEarned} loyalty coins
-      </Text>
-    )}
-  </View>
-);
-
-const renderReferralCoins = () => {
-  const availableCoins = referralData?.user?.loyaltyCoins || 0;
-  
-  return (
-    <View style={styles.section}>
-      <Text style={styles.sectionTitle}>Use Loyalty Coins</Text>
-      
-      {loadingReferrals ? (
-        <ActivityIndicator size="large" color={COLORS.primary} />
-      ) : availableCoins > 0 ? (
-        <View style={styles.referralStats}>
-          <View style={styles.coinsBalance}>
-            <Coins size={20} color="#F59E0B" />
-            <Text style={styles.coinsBalanceText}>
-              Available Coins: {availableCoins}
-            </Text>
-          </View>
-          
-          {referralData?.totalEarned > 0 && (
-            <Text style={styles.referralEarnings}>
-              Total Earned from Referrals: {formatPrice(referralData.totalEarned)}
-            </Text>
-          )}
-          
-          {referralData?.completed > 0 && (
-            <Text style={styles.referralCount}>
-              Completed Referrals: {referralData.completed}
-            </Text>
-          )}
-        </View>
-      ) : (
-        <Text style={styles.noReferralsText}>
-          You don't have any loyalty coins yet
-        </Text>
-      )}
-
-      {maxCoinsToUse > 0 && (
-        <View style={styles.coinsUsageContainer}>
-          <Text style={styles.coinsUsageLabel}>
-            Use coins for discount (10 coins = ₹1):
-          </Text>
-          
-          <View style={styles.coinsInputContainer}>
-            <TextInput
-              style={styles.coinsInput}
-              placeholder="0"
-              keyboardType="numeric"
-              value={coinsToUse.toString()}
-              onChangeText={handleCoinsChange}
-            />
-            <Text style={styles.coinsMaxText}>Max: {maxCoinsToUse}</Text>
-          </View>
-          
-          <View style={styles.coinsButtons}>
-            <TouchableOpacity 
-              style={styles.useMaxButton} 
-              onPress={useMaxCoins}
-              disabled={usingCoins}
-            >
-              <Text style={styles.useMaxText}>
-                {usingCoins ? '...' : 'Use Max'}
-              </Text>
-            </TouchableOpacity>
-            
-            {coinsToUse > 0 && (
-              <TouchableOpacity 
-                style={styles.removeCoinsButton} 
-                onPress={removeCoins}
-                disabled={usingCoins}
-              >
-                <Text style={styles.removeCoinsText}>
-                  {usingCoins ? '...' : 'Remove'}
+        
+        {checkingOfferEligibility ? (
+          <ActivityIndicator size="small" color={COLORS.warning} style={{ marginTop: 8 }} />
+        ) : (
+          <>
+            {!offerEligibility.eligible ? (
+              <View style={styles.restrictedProductsContainer}>
+                <Text style={styles.restrictedProductsTitle}>
+                  You cannot purchase these 1rs products:
                 </Text>
-              </TouchableOpacity>
+                {offerEligibility.restrictedProducts.map(productId => {
+                  const item = cartItems.find(item => {
+                    const id = item.productId?._id || item.productId?.id || item._id;
+                    return id === productId;
+                  });
+                  return item ? (
+                    <Text key={productId} style={styles.restrictedProduct}>
+                      • {getItemTitle(item)} - {formatPrice(getItemPrice(item))}
+                    </Text>
+                  ) : null;
+                })}
+                <Text style={styles.offerRuleText}>
+                  Rule: Only 1 purchase per month allowed for 1rs offer products
+                </Text>
+              </View>
+            ) : (
+              <View style={styles.offerInfoContainer}>
+                <Text style={styles.offerInfoText}>
+                  You're purchasing {offerProducts.length} 1rs offer product{offerProducts.length > 1 ? 's' : ''}
+                </Text>
+                <Text style={styles.offerRuleText}>
+                  Note: You can purchase 1rs offer products only once per month
+                </Text>
+              </View>
             )}
-          </View>
-          
-          {coinsToUse > 0 && (
-            <View style={styles.coinsDiscountInfo}>
-              <Text style={styles.coinsDiscountText}>
-                💰 You'll get {formatPrice(referralDiscount)} discount using {coinsToUse} coins
+          </>
+        )}
+      </View>
+    );
+  };
+
+  const renderOrderSummary = () => (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>Order Summary</Text>
+      {cartItems.map((item, index) => {
+        const price = getItemPrice(item);
+        const quantity = item.quantity || 1;
+        const title = getItemTitle(item);
+        const isOfferProduct = is1RsOfferProduct(item.productId || item);
+        
+        return (
+          <View 
+            key={item._id || `${item.productId?._id || index}-${Math.random()}`} 
+            style={styles.itemRow}
+          >
+            <View style={styles.itemTitleContainer}>
+              <Text style={styles.itemName}>
+                {title} × {quantity}
               </Text>
-              <Text style={styles.coinsConversionText}>
-                Conversion: {coinsToUse} coins = ₹{(coinsToUse / 10).toFixed(2)}
-              </Text>
+              {isOfferProduct && (
+                <Text style={styles.offerBadge}>1rs Offer</Text>
+              )}
             </View>
-          )}
+            <Text style={[
+              styles.itemPrice,
+              isOfferProduct && styles.offerProductPrice
+            ]}>
+              {formatPrice(price * quantity)}
+            </Text>
+          </View>
+        );
+      })}
+      <View style={styles.divider} />
+      <View style={styles.summaryRow}>
+        <Text style={styles.summaryLabel}>Subtotal</Text>
+        <Text style={styles.summaryValue}>{formatPrice(subtotal)}</Text>
+      </View>
+      <View style={styles.summaryRow}>
+        <Text style={styles.summaryLabel}>Discount (10%)</Text>
+        <Text style={[styles.summaryValue, styles.discountText]}>
+          -{formatPrice(baseDiscount)}
+        </Text>
+      </View>
+      {appliedCoupon && (
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryLabel}>Coupon ({appliedCoupon.code})</Text>
+          <Text style={[styles.summaryValue, styles.discountText]}>
+            -{formatPrice(couponDiscount)}
+          </Text>
         </View>
       )}
-
-      {maxCoinsToUse === 0 && availableCoins > 0 && (
-        <Text style={styles.noCoinsMessage}>
-          You can't use coins on this order. Minimum order value after discounts should be more than ₹0.
+      {selectedPayment === 'wallet' && useWalletBalance && calculatedWalletDiscount > 0 && (
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryLabel}>Wallet Payment</Text>
+          <Text style={[styles.summaryValue, styles.discountText]}>
+            -{formatPrice(calculatedWalletDiscount)}
+          </Text>
+        </View>
+      )}
+      <View style={styles.summaryRow}>
+        <Text style={styles.summaryLabel}>Delivery Fee</Text>
+        <Text style={styles.summaryValue}>
+          {deliveryFee === 0 ? 'FREE' : formatPrice(deliveryFee)}
         </Text>
+      </View>
+      <View style={[styles.summaryRow, styles.totalRow]}>
+        <Text style={styles.totalLabel}>Total</Text>
+        <Text style={styles.totalValue}>{formatPrice(total)}</Text>
+      </View>
+      
+      {selectedPayment === 'wallet' && useWalletBalance && calculatedWalletDiscount > 0 && (
+        <View style={styles.walletSummary}>
+          <View style={styles.coinsInfo}>
+            <Coins size={16} color={COLORS.warning} />
+            <Text style={styles.coinsInfoText}>
+              Using {coinsNeeded} coins ({formatPrice(calculatedWalletDiscount)})
+            </Text>
+          </View>
+          <Text style={styles.remainingCoins}>
+            Remaining coins: {loyaltyCoins - coinsNeeded}
+          </Text>
+          <Text style={styles.conversionRate}>
+            Conversion: 1000 coins = ₹10
+          </Text>
+        </View>
       )}
     </View>
   );
-};
 
-const renderCoupon = () => (
-  <View style={styles.section}>
-    <Text style={styles.sectionTitle}>Apply Coupon</Text>
-    
-    {availableCoupons.length > 0 && (
-      <View style={styles.availableCoupons}>
-        <Text style={styles.availableCouponsTitle}>Available Coupons:</Text>
-        {availableCoupons.map((coupon) => (
-          <View key={coupon.code} style={styles.couponCard}>
-            <View style={styles.couponInfo}>
-              <Text style={styles.couponCode}>{coupon.code}</Text>
-              <Text style={styles.couponDescription}>{coupon.description}</Text>
-              <Text style={styles.couponMinAmount}>
-                Min: {formatPrice(coupon.minAmount)}
-              </Text>
+  const renderCoupon = () => (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>Apply Coupon</Text>
+      
+      {loadingCoupons ? (
+        <ActivityIndicator size="large" color={COLORS.primary} />
+      ) : availableCoupons.length > 0 ? (
+        <View style={styles.availableCoupons}>
+          <Text style={styles.availableCouponsTitle}>Available Coupons:</Text>
+          {availableCoupons.map((coupon) => (
+            <View key={coupon._id} style={styles.couponCard}>
+              <View style={styles.couponInfo}>
+                <Text style={styles.couponCode}>{coupon.code}</Text>
+                <Text style={styles.couponDescription}>{coupon.description}</Text>
+                <View style={styles.couponDetails}>
+                  <Text style={styles.couponValue}>
+                    {formatCouponDiscount(coupon)}
+                  </Text>
+                  <Text style={styles.couponMinAmount}>
+                    {formatCouponMinOrder(coupon)}
+                  </Text>
+                </View>
+                {coupon.expiresAt && (
+                  <Text style={styles.couponExpiry}>
+                    Expires: {new Date(coupon.expiresAt).toLocaleDateString()}
+                  </Text>
+                )}
+              </View>
+              <TouchableOpacity 
+                style={styles.applyCouponBtn} 
+                onPress={() => {
+                  setCouponCode(coupon.code);
+                  applyCoupon(coupon.code);
+                }}
+                disabled={validatingCoupon}
+              >
+                <Text style={styles.applyCouponText}>
+                  {validatingCoupon && couponCode === coupon.code ? '...' : 'Apply'}
+                </Text>
+              </TouchableOpacity>
             </View>
-            <TouchableOpacity 
-              style={styles.applyCouponBtn} 
-              onPress={() => {
-                setCouponCode(coupon.code);
-                applyCoupon(coupon.code);
-              }}
-            >
-              <Text style={styles.applyCouponText}>Apply</Text>
-            </TouchableOpacity>
-          </View>
-        ))}
-      </View>
-    )}
-
-    <View style={styles.couponContainer}>
-      <TextInput 
-        style={[styles.input, { flex: 1 }]} 
-        placeholder="Enter coupon code" 
-        value={couponCode} 
-        onChangeText={setCouponCode} 
-        editable={!validatingCoupon} 
-      />
-      {appliedCoupon ? (
-        <TouchableOpacity 
-          style={styles.removeBtn} 
-          onPress={removeCoupon}
-        >
-          <Text style={styles.removeText}>Remove</Text>
-        </TouchableOpacity>
+          ))}
+        </View>
       ) : (
-        <TouchableOpacity 
-          style={styles.applyBtn} 
-          onPress={() => applyCoupon()} 
-          disabled={validatingCoupon}
-        >
-          {validatingCoupon ? (
-            <ActivityIndicator size="small" color="#fff" />
-          ) : (
-            <Text style={styles.applyText}>Apply</Text>
-          )}
-        </TouchableOpacity>
+        <Text style={styles.noCouponsText}>
+          No coupons available for this order
+        </Text>
+      )}
+
+      <View style={styles.couponContainer}>
+        <TextInput 
+          style={[styles.input, { flex: 1 }]} 
+          placeholder="Enter coupon code" 
+          value={couponCode} 
+          onChangeText={setCouponCode} 
+          editable={!validatingCoupon} 
+        />
+        {appliedCoupon ? (
+          <TouchableOpacity 
+            style={styles.removeBtn} 
+            onPress={removeCoupon}
+            disabled={validatingCoupon}
+          >
+            <Text style={styles.removeText}>Remove</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity 
+            style={styles.applyBtn} 
+            onPress={() => applyCoupon()} 
+            disabled={validatingCoupon || !couponCode.trim()}
+          >
+            {validatingCoupon ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.applyText}>Apply</Text>
+            )}
+          </TouchableOpacity>
+        )}
+      </View>
+      
+      {appliedCoupon && (
+        <Text style={styles.couponApplied}>✅ {appliedCoupon.description}</Text>
       )}
     </View>
-    
-    {appliedCoupon && (
-      <Text style={styles.couponApplied}>✅ {appliedCoupon.description}</Text>
-    )}
-  </View>
-);
+  );
 
-const renderPayment = () => (
-  <View style={styles.section}>
-    <Text style={styles.sectionTitle}>Payment Method</Text>
-    {PAYMENT_METHODS.map((method) => (
-      <TouchableOpacity 
-        key={method.id} 
-        style={[
-          styles.paymentOption, 
-          selectedPayment === method.id && styles.selectedPayment
-        ]} 
-        onPress={() => setSelectedPayment(method.id)}
-      >
-        <View style={styles.paymentHeader}>
-          <Text style={styles.paymentIcon}>{method.icon}</Text>
-          <View style={styles.paymentInfo}>
-            <Text style={styles.paymentName}>{method.name}</Text>
-            <Text style={styles.paymentDescription}>{method.description}</Text>
-          </View>
-        </View>
-        <View style={[
-          styles.radioButton, 
-          selectedPayment === method.id && styles.radioButtonSelected
-        ]}>
-          {selectedPayment === method.id && (
-            <View style={styles.radioButtonInner} />
+  const renderPayment = () => (
+    <View style={styles.section}>
+      <Text style={styles.sectionTitle}>Payment Method</Text>
+      {PAYMENT_METHODS.map((method) => (
+        <View key={method.id}>
+          <TouchableOpacity 
+            style={[
+              styles.paymentOption, 
+              selectedPayment === method.id && styles.selectedPayment,
+              method.id === 'wallet' && styles.walletOption
+            ]} 
+            onPress={() => {
+              setSelectedPayment(method.id);
+              if (method.id === 'wallet') {
+                setUseWalletBalance(true);
+              } else {
+                setUseWalletBalance(false);
+              }
+            }}
+          >
+            <View style={styles.paymentHeader}>
+              <Text style={styles.paymentIcon}>{method.icon}</Text>
+              <View style={styles.paymentInfo}>
+                <Text style={styles.paymentName}>{method.name}</Text>
+                <Text style={styles.paymentDescription}>{method.description}</Text>
+                
+                {method.id === 'wallet' && (
+                  <View style={styles.walletBalanceContainer}>
+                    <View style={styles.walletBalanceRow}>
+                      <Wallet size={14} color={COLORS.wallet} />
+                      <Text style={styles.walletBalanceText}>
+                        Balance: {formatPrice(walletBalance)} ({loyaltyCoins} coins)
+                      </Text>
+                    </View>
+                  </View>
+                )}
+              </View>
+            </View>
+            <View style={[
+              styles.radioButton, 
+              selectedPayment === method.id && styles.radioButtonSelected
+            ]}>
+              {selectedPayment === method.id && (
+                <View style={styles.radioButtonInner} />
+              )}
+            </View>
+          </TouchableOpacity>
+          
+          {method.id === 'wallet' && selectedPayment === 'wallet' && (
+            <View style={styles.walletUsageContainer}>
+              <TouchableOpacity 
+                style={styles.walletToggle}
+                onPress={() => setUseWalletBalance(!useWalletBalance)}
+                disabled={loyaltyCoins <= 0}
+              >
+                <View style={[
+                  styles.toggleSwitch,
+                  useWalletBalance && styles.toggleSwitchOn,
+                  loyaltyCoins <= 0 && styles.toggleSwitchDisabled
+                ]}>
+                  <View style={[
+                    styles.toggleCircle,
+                    useWalletBalance && styles.toggleCircleOn
+                  ]} />
+                </View>
+                <Text style={[
+                  styles.walletToggleText,
+                  loyaltyCoins <= 0 && styles.walletToggleTextDisabled
+                ]}>
+                  {loyaltyCoins <= 0 ? 'No coins available' : `Use wallet balance`}
+                </Text>
+              </TouchableOpacity>
+              
+              {useWalletBalance && loyaltyCoins > 0 && (
+                <View style={styles.walletDetails}>
+                  <Text style={styles.walletConversion}>
+                    💰 Conversion: 1000 coins = ₹10
+                  </Text>
+                  {calculatedWalletDiscount > 0 ? (
+                    <>
+                      <Text style={styles.walletDiscount}>
+                        You'll save: {formatPrice(calculatedWalletDiscount)} using {coinsNeeded} coins
+                      </Text>
+                      <Text style={styles.walletRemaining}>
+                        Remaining coins: {loyaltyCoins - coinsNeeded}
+                      </Text>
+                    </>
+                  ) : (
+                    <Text style={styles.walletNoDiscount}>
+                      Wallet balance will be applied to your order
+                    </Text>
+                  )}
+                </View>
+              )}
+            </View>
           )}
         </View>
-      </TouchableOpacity>
-    ))}
-  </View>
-);
+      ))}
+    </View>
+  );
 
   const renderAddressModal = () => (
     <Modal 
@@ -1271,29 +1563,42 @@ const renderPayment = () => (
     </Modal>
   );
 
-  const renderCheckoutBar = () => (
-    <View style={styles.checkoutContainer}>
-      <TouchableOpacity 
-        style={[
-          styles.placeOrderButton, 
-          !selectedAddressId && styles.disabledButton
-        ]} 
-        disabled={!selectedAddressId || placingOrder} 
-        onPress={placeOrder}
-      >
-        {placingOrder ? (
-          <ActivityIndicator color="#fff" />
-        ) : (
-          <Text style={styles.placeOrderText}>
-            {!selectedAddressId 
-              ? 'Select Address' 
-              : `Place Order - ${formatPrice(total)}`
-            }
-          </Text>
+  const renderCheckoutBar = () => {
+    const isDisabled = !selectedAddressId || placingOrder || !offerEligibility.eligible;
+    
+    return (
+      <View style={styles.checkoutContainer}>
+        {!offerEligibility.eligible && (
+          <View style={styles.restrictedWarningContainer}>
+            <Text style={styles.restrictedWarningText}>
+              ⚠️ Remove restricted 1rs products to place order
+            </Text>
+          </View>
         )}
-      </TouchableOpacity>
-    </View>
-  );
+        <TouchableOpacity 
+          style={[
+            styles.placeOrderButton, 
+            isDisabled && styles.disabledButton
+          ]} 
+          disabled={isDisabled} 
+          onPress={placeOrder}
+        >
+          {placingOrder ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.placeOrderText}>
+              {!selectedAddressId 
+                ? 'Select Address' 
+                : !offerEligibility.eligible
+                  ? 'Cannot Place Order'
+                  : `Place Order - ${formatPrice(total)}`
+              }
+            </Text>
+          )}
+        </TouchableOpacity>
+      </View>
+    );
+  };
 
   // ---------- MAIN ----------
   return (
@@ -1305,8 +1610,8 @@ const renderPayment = () => (
       >
         {renderPincode()}
         {renderAddresses()}
+        {renderOfferProductWarning()}
         {renderOrderSummary()}
-        {renderReferralCoins()}
         {renderCoupon()}
         {renderPayment()}
       </ScrollView>
@@ -1317,971 +1622,742 @@ const renderPayment = () => (
   );
 }
 
+// ---------- STYLES ----------
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    backgroundColor: COLORS.background 
+  container: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: COLORS.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.text.primary,
+    marginLeft: 12,
   },
   scrollContent: {
-    paddingBottom: 140
+    paddingBottom: 120,
   },
-  header: { 
-    backgroundColor: COLORS.surface, 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    paddingTop: 48, 
-    paddingHorizontal: 16, 
-    paddingBottom: 16, 
-    borderBottomWidth: 1, 
-    borderBottomColor: COLORS.border 
+  section: {
+    backgroundColor: COLORS.surface,
+    marginHorizontal: 16,
+    marginTop: 16,
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
   },
-  headerTitle: { 
-    fontSize: 18, 
-    fontWeight: '600', 
-    color: COLORS.text.primary, 
-    marginLeft: 16 
-  },
-
-  section: { 
-    backgroundColor: COLORS.surface, 
-    marginTop: 16, 
-    marginHorizontal: 16, 
-    borderRadius: 12, 
-    padding: 16, 
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 2
-  },
-  sectionHeader: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    marginBottom: 12 
-  },
-  sectionTitle: { 
-    fontSize: 16, 
-    fontWeight: '600', 
-    color: COLORS.text.primary 
-  },
-
-  pincodeContainer: { 
-    flexDirection: 'row', 
-    alignItems: 'center' 
-  },
-  pincodeInput: { 
-    flex: 1, 
-    borderWidth: 1, 
-    borderColor: COLORS.border, 
-    borderRadius: 8, 
-    paddingHorizontal: 12, 
-    paddingVertical: 10, 
-    fontSize: 15, 
-    marginRight: 10 
-  },
-  checkPincodeButton: { 
-    backgroundColor: COLORS.primary, 
-    paddingHorizontal: 18, 
-    paddingVertical: 10, 
-    borderRadius: 8, 
-    minWidth: 80, 
-    alignItems: 'center' 
-  },
-  checkPincodeText: { 
-    color: '#fff', 
-    fontWeight: '600' 
-  },
-  deliveryStatus: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    marginTop: 10, 
-    padding: 10, 
-    borderRadius: 8 
-  },
-  deliveryAvailable: { 
-    backgroundColor: '#ECFDF5', 
-    borderLeftWidth: 4, 
-    borderLeftColor: COLORS.success 
-  },
-  deliveryUnavailable: { 
-    backgroundColor: '#FEF2F2', 
-    borderLeftWidth: 4, 
-    borderLeftColor: COLORS.error 
-  },
-  deliveryAvailableText: { 
-    color: COLORS.success, 
-    marginLeft: 8, 
-    fontWeight: '500' 
-  },
-  deliveryUnavailableText: { 
-    color: COLORS.error, 
-    marginLeft: 8, 
-    fontWeight: '500' 
-  },
-
-  addButton: { 
-    backgroundColor: COLORS.primary, 
-    paddingHorizontal: 12, 
-    paddingVertical: 6, 
-    borderRadius: 6 
-  },
-  addButtonText: { 
-    color: '#fff', 
-    fontSize: 14, 
-    fontWeight: '600' 
-  },
-  addressCard: { 
-    borderWidth: 1, 
-    borderColor: COLORS.border, 
-    borderRadius: 10, 
-    padding: 12, 
-    marginBottom: 8 
-  },
-  addressSelected: { 
-    borderColor: COLORS.primary, 
-    backgroundColor: '#ECFDF5' 
-  },
-  addressHeader: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    marginBottom: 4 
-  },
-  addressActions: { 
-    flexDirection: 'row', 
-    alignItems: 'center' 
-  },
-  addressLabel: { 
-    fontWeight: '700', 
-    color: COLORS.text.primary, 
-    fontSize: 14 
-  },
-  defaultBadge: { 
-    backgroundColor: COLORS.primary, 
-    paddingHorizontal: 8, 
-    paddingVertical: 2, 
-    borderRadius: 4, 
-    marginRight: 8 
-  },
-  defaultBadgeText: { 
-    color: '#fff', 
-    fontSize: 10, 
-    fontWeight: '600' 
-  },
-  deleteButtonText: { 
-    color: COLORS.error, 
-    fontSize: 12, 
-    fontWeight: '600' 
-  },
-  addressName: { 
-    fontWeight: '600', 
-    color: COLORS.text.primary, 
-    marginBottom: 2 
-  },
-  addressText: { 
-    color: COLORS.text.secondary, 
-    fontSize: 13, 
-    marginBottom: 2 
-  },
-  addressMobile: { 
-    color: COLORS.text.light, 
-    fontSize: 12, 
-    marginTop: 4 
-  },
-  noAddressCard: { 
-    borderWidth: 2, 
-    borderColor: COLORS.border, 
-    borderStyle: 'dashed', 
-    borderRadius: 10, 
-    padding: 20, 
-    alignItems: 'center', 
-    justifyContent: 'center' 
-  },
-  noAddressText: { 
-    fontSize: 16, 
-    fontWeight: '600', 
-    color: COLORS.text.primary, 
-    marginTop: 8 
-  },
-  noAddressSubText: { 
-    fontSize: 14, 
-    color: COLORS.text.secondary, 
-    marginTop: 4 
-  },
-
-  modalContainer: { 
-    flex: 1, 
-    backgroundColor: COLORS.surface 
-  },
-  modalHeader: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    paddingTop: 60, 
-    paddingHorizontal: 16, 
-    paddingBottom: 16, 
-    borderBottomWidth: 1, 
-    borderBottomColor: COLORS.border 
-  },
-  modalTitle: { 
-    fontSize: 18, 
-    fontWeight: '600', 
-    color: COLORS.text.primary 
-  },
-  modalContent: { 
-    flex: 1, 
-    padding: 16 
-  },
-  modalFooter: { 
-    padding: 16, 
-    borderTopWidth: 1, 
-    borderTopColor: COLORS.border 
-  },
-
-  addressTypeContainer: { 
-    marginVertical: 16 
-  },
-  addressTypeLabel: { 
-    fontSize: 14, 
-    fontWeight: '600', 
-    color: '#374151', 
-    marginBottom: 8 
-  },
-  addressTypeButtons: {
-    flexDirection: 'row', 
-    flexWrap: 'wrap'
-  },
-  addressTypeButton: { 
-    borderWidth: 1, 
-    borderColor: COLORS.border, 
-    borderRadius: 8, 
-    paddingHorizontal: 16, 
-    paddingVertical: 10, 
-    marginRight: 8, 
-    marginBottom: 8 
-  },
-  addressTypeSelected: { 
-    borderColor: COLORS.primary, 
-    backgroundColor: '#ECFDF5' 
-  },
-  addressTypeText: { 
-    color: COLORS.text.secondary, 
-    fontWeight: '500' 
-  },
-  addressTypeTextSelected: { 
-    color: COLORS.primary, 
-    fontWeight: '600' 
-  },
-
-  setDefaultContainer: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    marginBottom: 20 
-  },
-  checkbox: { 
-    width: 20, 
-    height: 20, 
-    borderWidth: 2, 
-    borderColor: COLORS.border, 
-    borderRadius: 4, 
-    marginRight: 12, 
-    alignItems: 'center', 
-    justifyContent: 'center' 
-  },
-  checkboxChecked: { 
-    backgroundColor: COLORS.primary, 
-    borderColor: COLORS.primary 
-  },
-  setDefaultText: { 
-    fontSize: 14, 
-    color: '#374151', 
-    fontWeight: '500' 
-  },
-  saveAddressButton: { 
-    backgroundColor: COLORS.primary, 
-    paddingVertical: 16, 
-    borderRadius: 8, 
-    alignItems: 'center' 
-  },
-  saveAddressText: { 
-    color: '#fff', 
-    fontSize: 16, 
-    fontWeight: '600' 
-  },
-
-  availableCoupons: { 
-    marginBottom: 16 
-  },
-  availableCouponsTitle: { 
-    fontSize: 14, 
-    fontWeight: '600', 
-    color: '#374151', 
-    marginBottom: 8 
-  },
-  couponCard: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    backgroundColor: '#F3F4F6', 
-    borderRadius: 8, 
-    padding: 12, 
-    marginBottom: 8 
-  },
-  couponInfo: { 
-    flex: 1 
-  },
-  couponCode: { 
-    fontSize: 14, 
-    fontWeight: '700', 
-    color: COLORS.primary 
-  },
-  couponDescription: { 
-    fontSize: 12, 
-    color: '#374151', 
-    marginTop: 2 
-  },
-  couponMinAmount: { 
-    fontSize: 11, 
-    color: COLORS.text.secondary, 
-    marginTop: 2 
-  },
-  applyCouponBtn: { 
-    backgroundColor: COLORS.primary, 
-    paddingHorizontal: 12, 
-    paddingVertical: 6, 
-    borderRadius: 4 
-  },
-  applyCouponText: { 
-    color: '#fff', 
-    fontSize: 12, 
-    fontWeight: '600' 
-  },
-
-  input: { 
-    borderWidth: 1, 
-    borderColor: COLORS.border, 
-    borderRadius: 8, 
-    paddingHorizontal: 12, 
-    paddingVertical: 10, 
-    marginBottom: 10, 
-    fontSize: 15 
-  },
-  itemRow: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    marginBottom: 6 
-  },
-  itemName: { 
-    fontSize: 14, 
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: '600',
     color: COLORS.text.primary,
+    marginBottom: 12,
+  },
+  // Pincode styles
+  pincodeContainer: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  pincodeInput: {
     flex: 1,
-    marginRight: 8
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
   },
-  itemPrice: { 
-    fontSize: 14, 
-    fontWeight: '600' 
+  checkPincodeButton: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    justifyContent: 'center',
   },
-  divider: { 
-    borderBottomWidth: 1, 
-    borderColor: COLORS.border, 
-    marginVertical: 8 
+  buttonDisabled: {
+    backgroundColor: COLORS.text.light,
   },
-  summaryRow: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    marginBottom: 4 
-  },
-  totalRow: { 
-    marginTop: 6, 
-    borderTopWidth: 1, 
-    borderColor: COLORS.border, 
-    paddingTop: 6 
-  },
-  summaryLabel: { 
-    fontSize: 14, 
-    color: COLORS.text.secondary 
-  },
-  summaryValue: { 
-    fontSize: 14, 
-    fontWeight: '600', 
-    color: COLORS.text.primary 
-  },
-  discountText: { 
-    color: COLORS.success 
-  },
-  totalLabel: { 
-    fontSize: 16, 
-    fontWeight: '700' 
-  },
-  totalValue: { 
-    fontSize: 16, 
-    fontWeight: '700', 
-    color: COLORS.text.primary 
-  },
-  coinsText: { 
-    backgroundColor: '#FEF3C7', 
-    color: '#92400E', 
-    fontWeight: '600', 
-    textAlign: 'center', 
-    padding: 10, 
-    borderRadius: 6, 
-    marginTop: 10 
-  },
-  couponContainer: { 
-    flexDirection: 'row', 
-    alignItems: 'center' 
-  },
-  applyBtn: { 
-    backgroundColor: COLORS.primary, 
-    paddingVertical: 10, 
-    paddingHorizontal: 16, 
-    borderRadius: 8, 
-    marginLeft: 8, 
-    minWidth: 80, 
-    alignItems: 'center' 
-  },
-  applyText: { 
-    color: '#fff', 
-    fontWeight: '600' 
-  },
-  removeBtn: { 
-    backgroundColor: COLORS.error, 
-    paddingVertical: 10, 
-    paddingHorizontal: 16, 
-    borderRadius: 8, 
-    marginLeft: 8, 
-    minWidth: 80, 
-    alignItems: 'center' 
-  },
-  removeText: { 
-    color: '#fff', 
-    fontWeight: '600' 
-  },
-  couponApplied: { 
-    color: COLORS.success, 
-    fontSize: 13, 
-    marginTop: 8, 
-    fontWeight: '600' 
-  },
-
-  paymentOption: { 
-    flexDirection: 'row', 
-    justifyContent: 'space-between', 
-    alignItems: 'center', 
-    paddingVertical: 12, 
-    paddingHorizontal: 12, 
-    borderRadius: 8, 
-    marginBottom: 8, 
-    borderWidth: 1, 
-    borderColor: COLORS.border 
-  },
-  paymentHeader: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    flex: 1 
-  },
-  paymentIcon: { 
-    fontSize: 20, 
-    marginRight: 12 
-  },
-  paymentInfo: { 
-    flex: 1 
-  },
-  paymentName: { 
-    fontSize: 15, 
-    fontWeight: '600', 
-    color: COLORS.text.primary, 
-    marginBottom: 2 
-  },
-  paymentDescription: { 
-    fontSize: 12, 
-    color: COLORS.text.secondary 
-  },
-  selectedPayment: { 
-    borderColor: COLORS.primary, 
-    backgroundColor: '#ECFDF5' 
-  },
-  radioButton: { 
-    width: 20, 
-    height: 20, 
-    borderRadius: 10, 
-    borderWidth: 2, 
-    borderColor: COLORS.border, 
-    alignItems: 'center', 
-    justifyContent: 'center' 
-  },
-  radioButtonSelected: { 
-    borderColor: COLORS.primary 
-  },
-  radioButtonInner: { 
-    width: 10, 
-    height: 10, 
-    borderRadius: 5, 
-    backgroundColor: COLORS.primary 
-  },
-
-  checkoutContainer: { 
-    position: 'absolute', 
-    bottom: 0, 
-    left: 0, 
-    right: 0, 
-    backgroundColor: COLORS.surface, 
-    borderTopWidth: 1, 
-    borderTopColor: COLORS.border, 
-    paddingHorizontal: 16, 
-    paddingVertical: 16 
-  },
-  placeOrderButton: { 
-    backgroundColor: COLORS.primary, 
-    paddingVertical: 16, 
-    borderRadius: 8, 
-    alignItems: 'center' 
-  },
-  placeOrderText: { 
-    color: '#fff', 
-    fontWeight: '600', 
-    fontSize: 16 
-  },
-  disabledButton: { 
-    backgroundColor: COLORS.border 
-  },
-
-  // Referral Coins Styles
-  referralStats: { 
-    marginBottom: 16 
-  },
-  coinsBalance: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    marginBottom: 8 
-  },
-  coinsBalanceText: { 
-    fontSize: 14, 
-    fontWeight: '600', 
-    color: '#92400E', 
-    marginLeft: 8 
-  },
-  referralEarnings: { 
-    fontSize: 12, 
-    color: COLORS.text.secondary, 
-    marginBottom: 4 
-  },
-  referralCount: { 
-    fontSize: 12, 
-    color: COLORS.text.secondary 
-  },
-  remainingCoins: { 
-    fontSize: 12, 
-    color: COLORS.primary, 
+  checkPincodeText: {
+    color: '#fff',
     fontWeight: '600',
-    marginTop: 4
+    fontSize: 14,
   },
-  noReferralsText: { 
-    fontSize: 14, 
-    color: COLORS.text.secondary, 
-    textAlign: 'center', 
-    marginVertical: 16 
+  // Address styles
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 12,
   },
-
-  coinsUsageContainer: { 
-    marginTop: 12 
-  },
-  coinsUsageLabel: { 
-    fontSize: 14, 
-    fontWeight: '600', 
-    color: COLORS.text.primary, 
-    marginBottom: 8 
-  },
-  coinsInputContainer: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    marginBottom: 8 
-  },
-  coinsInput: { 
-    borderWidth: 1, 
-    borderColor: COLORS.border, 
-    borderRadius: 8, 
-    paddingHorizontal: 12, 
-    paddingVertical: 10, 
-    fontSize: 15, 
-    width: 80,
-    marginRight: 12
-  },
-  coinsMaxText: { 
-    fontSize: 12, 
-    color: COLORS.text.secondary 
-  },
-  coinsButtons: { 
-    flexDirection: 'row', 
-    marginBottom: 8 
-  },
-  useMaxButton: { 
-    backgroundColor: '#F59E0B', 
-    paddingHorizontal: 12, 
-    paddingVertical: 6, 
+  addButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    backgroundColor: COLORS.primary,
     borderRadius: 6,
-    marginRight: 8
   },
-  useMaxText: { 
-    color: '#fff', 
-    fontSize: 12, 
-    fontWeight: '600' 
+  addButtonText: {
+    color: '#fff',
+    fontWeight: '500',
+    fontSize: 14,
   },
-  removeCoinsButton: { 
-    backgroundColor: COLORS.error, 
-    paddingHorizontal: 12, 
-    paddingVertical: 6, 
-    borderRadius: 6 
+  addressCard: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 8,
   },
-  removeCoinsText: { 
-    color: '#fff', 
-    fontSize: 12, 
-    fontWeight: '600' 
+  addressSelected: {
+    borderColor: COLORS.primary,
+    borderWidth: 2,
   },
-  
-  coinsDiscountInfo: {
-    backgroundColor: '#ECFDF5',
-    padding: 8,
-    borderRadius: 6
+  addressHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
   },
-  coinsDiscountText: { 
-    color: COLORS.success, 
-    fontSize: 13, 
+  addressLabel: {
+    fontSize: 14,
     fontWeight: '600',
-    marginBottom: 2
+    color: COLORS.text.primary,
   },
-  coinsConversionText: {
+  addressActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  defaultBadge: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+  },
+  defaultBadgeText: {
+    color: '#fff',
+    fontSize: 10,
+    fontWeight: '500',
+  },
+  deleteButtonText: {
+    color: COLORS.error,
+    fontSize: 14,
+  },
+  addressName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.text.primary,
+    marginBottom: 4,
+  },
+  addressText: {
+    fontSize: 13,
     color: COLORS.text.secondary,
-    fontSize: 11
+    marginBottom: 2,
   },
-  
-  noCoinsMessage: {
+  addressMobile: {
+    fontSize: 13,
+    color: COLORS.text.secondary,
+    marginTop: 4,
+  },
+  noAddressCard: {
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderStyle: 'dashed',
+    borderRadius: 8,
+    padding: 24,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  noAddressText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: COLORS.text.primary,
+    marginTop: 8,
+  },
+  noAddressSubText: {
     fontSize: 12,
     color: COLORS.text.secondary,
-    textAlign: 'center',
-    marginTop: 8,
-    fontStyle: 'italic'
+    marginTop: 4,
   },
-  // Add these styles to your existing styles object
-
-// Order Summary Styles
-itemRow: {
-  flexDirection: 'row',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  paddingVertical: 8,
-  borderBottomWidth: 1,
-  borderBottomColor: COLORS.border,
-},
-itemName: {
-  fontSize: 14,
-  color: COLORS.text.primary,
-  flex: 1,
-},
-itemPrice: {
-  fontSize: 14,
-  fontWeight: '600',
-  color: COLORS.text.primary,
-},
-divider: {
-  height: 1,
-  backgroundColor: COLORS.border,
-  marginVertical: 12,
-},
-summaryRow: {
-  flexDirection: 'row',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  paddingVertical: 6,
-},
-totalRow: {
-  borderTopWidth: 1,
-  borderTopColor: COLORS.border,
-  marginTop: 8,
-  paddingTop: 12,
-},
-summaryLabel: {
-  fontSize: 14,
-  color: COLORS.text.secondary,
-},
-summaryValue: {
-  fontSize: 14,
-  fontWeight: '500',
-  color: COLORS.text.primary,
-},
-totalLabel: {
-  fontSize: 16,
-  fontWeight: '600',
-  color: COLORS.text.primary,
-},
-totalValue: {
-  fontSize: 18,
-  fontWeight: '700',
-  color: COLORS.primary,
-},
-discountText: {
-  color: COLORS.success,
-},
-coinsText: {
-  fontSize: 14,
-  color: COLORS.primary,
-  textAlign: 'center',
-  marginTop: 8,
-  fontWeight: '500',
-},
-
-// Referral Coins Styles
-referralStats: {
-  marginBottom: 16,
-},
-coinsBalance: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  marginBottom: 8,
-},
-coinsBalanceText: {
-  fontSize: 16,
-  fontWeight: '600',
-  color: COLORS.text.primary,
-  marginLeft: 8,
-},
-referralEarnings: {
-  fontSize: 14,
-  color: COLORS.text.secondary,
-  marginBottom: 4,
-},
-referralCount: {
-  fontSize: 14,
-  color: COLORS.text.secondary,
-},
-noReferralsText: {
-  fontSize: 14,
-  color: COLORS.text.secondary,
-  textAlign: 'center',
-  fontStyle: 'italic',
-},
-coinsUsageContainer: {
-  borderTopWidth: 1,
-  borderTopColor: COLORS.border,
-  paddingTop: 16,
-},
-coinsUsageLabel: {
-  fontSize: 14,
-  color: COLORS.text.primary,
-  marginBottom: 8,
-},
-coinsInputContainer: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  marginBottom: 12,
-},
-coinsInput: {
-  borderWidth: 1,
-  borderColor: COLORS.border,
-  borderRadius: 8,
-  paddingHorizontal: 12,
-  paddingVertical: 10,
-  fontSize: 16,
-  width: 80,
-  marginRight: 12,
-},
-coinsMaxText: {
-  fontSize: 14,
-  color: COLORS.text.secondary,
-},
-coinsButtons: {
-  flexDirection: 'row',
-  gap: 12,
-  marginBottom: 12,
-},
-useMaxButton: {
-  backgroundColor: COLORS.primary,
-  paddingHorizontal: 16,
-  paddingVertical: 8,
-  borderRadius: 6,
-},
-useMaxText: {
-  color: '#fff',
-  fontSize: 14,
-  fontWeight: '500',
-},
-removeCoinsButton: {
-  backgroundColor: COLORS.error,
-  paddingHorizontal: 16,
-  paddingVertical: 8,
-  borderRadius: 6,
-},
-removeCoinsText: {
-  color: '#fff',
-  fontSize: 14,
-  fontWeight: '500',
-},
-coinsDiscountInfo: {
-  backgroundColor: '#F0F9FF',
-  padding: 12,
-  borderRadius: 8,
-},
-coinsDiscountText: {
-  fontSize: 14,
-  color: COLORS.primary,
-  fontWeight: '500',
-  marginBottom: 4,
-},
-coinsConversionText: {
-  fontSize: 12,
-  color: COLORS.text.secondary,
-},
-noCoinsMessage: {
-  fontSize: 14,
-  color: COLORS.text.secondary,
-  textAlign: 'center',
-  fontStyle: 'italic',
-  marginTop: 8,
-},
-
-// Coupon Styles
-availableCoupons: {
-  marginBottom: 16,
-},
-availableCouponsTitle: {
-  fontSize: 14,
-  fontWeight: '600',
-  color: COLORS.text.primary,
-  marginBottom: 8,
-},
-couponCard: {
-  flexDirection: 'row',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  backgroundColor: '#F8FAFC',
-  padding: 12,
-  borderRadius: 8,
-  marginBottom: 8,
-  borderWidth: 1,
-  borderColor: COLORS.border,
-},
-couponInfo: {
-  flex: 1,
-},
-couponCode: {
-  fontSize: 16,
-  fontWeight: '600',
-  color: COLORS.primary,
-  marginBottom: 4,
-},
-couponDescription: {
-  fontSize: 14,
-  color: COLORS.text.primary,
-  marginBottom: 4,
-},
-couponMinAmount: {
-  fontSize: 12,
-  color: COLORS.text.secondary,
-},
-applyCouponBtn: {
-  backgroundColor: COLORS.primary,
-  paddingHorizontal: 16,
-  paddingVertical: 8,
-  borderRadius: 6,
-},
-applyCouponText: {
-  color: '#fff',
-  fontSize: 14,
-  fontWeight: '500',
-},
-couponContainer: {
-  flexDirection: 'row',
-  gap: 12,
-  alignItems: 'center',
-},
-applyBtn: {
-  backgroundColor: COLORS.primary,
-  paddingHorizontal: 20,
-  paddingVertical: 12,
-  borderRadius: 8,
-  minWidth: 80,
-  alignItems: 'center',
-},
-applyText: {
-  color: '#fff',
-  fontSize: 14,
-  fontWeight: '600',
-},
-removeBtn: {
-  backgroundColor: COLORS.error,
-  paddingHorizontal: 20,
-  paddingVertical: 12,
-  borderRadius: 8,
-  minWidth: 80,
-  alignItems: 'center',
-},
-removeText: {
-  color: '#fff',
-  fontSize: 14,
-  fontWeight: '600',
-},
-couponApplied: {
-  fontSize: 14,
-  color: COLORS.success,
-  fontWeight: '500',
-  marginTop: 8,
-  textAlign: 'center',
-},
-
-// Payment Styles
-paymentOption: {
-  flexDirection: 'row',
-  justifyContent: 'space-between',
-  alignItems: 'center',
-  padding: 16,
-  borderWidth: 1,
-  borderColor: COLORS.border,
-  borderRadius: 8,
-  marginBottom: 12,
-},
-selectedPayment: {
-  borderColor: COLORS.primary,
-  backgroundColor: '#F0F9FF',
-},
-paymentHeader: {
-  flexDirection: 'row',
-  alignItems: 'center',
-  flex: 1,
-},
-paymentIcon: {
-  fontSize: 24,
-  marginRight: 12,
-},
-paymentInfo: {
-  flex: 1,
-},
-paymentName: {
-  fontSize: 16,
-  fontWeight: '600',
-  color: COLORS.text.primary,
-  marginBottom: 4,
-},
-paymentDescription: {
-  fontSize: 14,
-  color: COLORS.text.secondary,
-},
-radioButton: {
-  width: 20,
-  height: 20,
-  borderRadius: 10,
-  borderWidth: 2,
-  borderColor: COLORS.border,
-  alignItems: 'center',
-  justifyContent: 'center',
-},
-radioButtonSelected: {
-  borderColor: COLORS.primary,
-},
-radioButtonInner: {
-  width: 10,
-  height: 10,
-  borderRadius: 5,
-  backgroundColor: COLORS.primary,
-},
+  // Offer Product Warning styles
+  offerWarningSection: {
+    backgroundColor: '#FFF3CD',
+    borderWidth: 1,
+    borderColor: '#FFEEBA',
+    borderRadius: 8,
+    padding: 16,
+    marginHorizontal: 16,
+    marginTop: 16,
+  },
+  offerWarningTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#856404',
+  },
+  restrictedProductsContainer: {
+    backgroundColor: '#F8D7DA',
+    padding: 12,
+    borderRadius: 6,
+    marginTop: 8,
+  },
+  restrictedProductsTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#721C24',
+    marginBottom: 8,
+  },
+  restrictedProduct: {
+    fontSize: 13,
+    color: '#721C24',
+    marginLeft: 8,
+    marginBottom: 4,
+  },
+  offerInfoContainer: {
+    backgroundColor: '#D1ECF1',
+    padding: 12,
+    borderRadius: 6,
+    marginTop: 8,
+  },
+  offerInfoText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#0C5460',
+    marginBottom: 6,
+  },
+  offerRuleText: {
+    fontSize: 12,
+    color: '#856404',
+    fontStyle: 'italic',
+    marginTop: 8,
+  },
+  // Order Summary styles
+  itemRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+    paddingVertical: 4,
+  },
+  itemTitleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    flexWrap: 'wrap',
+  },
+  itemName: {
+    fontSize: 14,
+    color: COLORS.text.primary,
+    flex: 1,
+  },
+  offerBadge: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: COLORS.error,
+    backgroundColor: '#FEE2E2',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 4,
+    marginLeft: 8,
+  },
+  itemPrice: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: COLORS.text.primary,
+  },
+  offerProductPrice: {
+    color: COLORS.error,
+    fontWeight: '600',
+  },
+  divider: {
+    height: 1,
+    backgroundColor: COLORS.border,
+    marginVertical: 12,
+  },
+  summaryRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  summaryLabel: {
+    fontSize: 14,
+    color: COLORS.text.secondary,
+  },
+  summaryValue: {
+    fontSize: 14,
+    color: COLORS.text.primary,
+    fontWeight: '500',
+  },
+  discountText: {
+    color: COLORS.success,
+  },
+  totalRow: {
+    marginTop: 8,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  totalLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: COLORS.text.primary,
+  },
+  totalValue: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.primary,
+  },
+  walletSummary: {
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: '#FEF3C7',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#FDE68A',
+  },
+  coinsInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 6,
+  },
+  coinsInfoText: {
+    fontSize: 14,
+    color: '#92400E',
+    fontWeight: '500',
+  },
+  remainingCoins: {
+    fontSize: 13,
+    color: '#92400E',
+    marginBottom: 4,
+  },
+  conversionRate: {
+    fontSize: 12,
+    color: '#92400E',
+    fontStyle: 'italic',
+  },
+  // Coupon styles
+  availableCoupons: {
+    marginBottom: 12,
+  },
+  availableCouponsTitle: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: COLORS.text.primary,
+    marginBottom: 8,
+  },
+  couponCard: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#F3F4F6',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  couponInfo: {
+    flex: 1,
+  },
+  couponCode: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.primary,
+    marginBottom: 4,
+  },
+  couponDescription: {
+    fontSize: 12,
+    color: COLORS.text.secondary,
+    marginBottom: 4,
+  },
+  couponDetails: {
+    flexDirection: 'row',
+    gap: 12,
+  },
+  couponValue: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: COLORS.success,
+  },
+  couponMinAmount: {
+    fontSize: 12,
+    color: COLORS.text.light,
+  },
+  couponExpiry: {
+    fontSize: 11,
+    color: COLORS.text.light,
+    marginTop: 2,
+  },
+  applyCouponBtn: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  applyCouponText: {
+    color: '#fff',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  noCouponsText: {
+    fontSize: 14,
+    color: COLORS.text.secondary,
+    fontStyle: 'italic',
+    textAlign: 'center',
+    paddingVertical: 12,
+  },
+  couponContainer: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+  },
+  input: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+  },
+  inputError: {
+    borderColor: COLORS.error,
+  },
+  applyBtn: {
+    backgroundColor: COLORS.primary,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    justifyContent: 'center',
+    minWidth: 80,
+  },
+  applyText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  removeBtn: {
+    backgroundColor: COLORS.error,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderRadius: 8,
+    justifyContent: 'center',
+    minWidth: 80,
+  },
+  removeText: {
+    color: '#fff',
+    fontWeight: '600',
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  couponApplied: {
+    fontSize: 14,
+    color: COLORS.success,
+    fontWeight: '500',
+    marginTop: 8,
+  },
+  // Payment styles
+  paymentOption: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 12,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 8,
+    marginBottom: 8,
+  },
+  selectedPayment: {
+    borderColor: COLORS.primary,
+    borderWidth: 2,
+  },
+  walletOption: {
+    borderColor: COLORS.wallet,
+  },
+  paymentHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  paymentIcon: {
+    fontSize: 24,
+    marginRight: 12,
+  },
+  paymentInfo: {
+    flex: 1,
+  },
+  paymentName: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: COLORS.text.primary,
+    marginBottom: 2,
+  },
+  paymentDescription: {
+    fontSize: 12,
+    color: COLORS.text.secondary,
+  },
+  walletBalanceContainer: {
+    marginTop: 4,
+  },
+  walletBalanceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  walletBalanceText: {
+    fontSize: 11,
+    color: COLORS.wallet,
+    fontWeight: '500',
+  },
+  radioButton: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    borderWidth: 2,
+    borderColor: COLORS.border,
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 8,
+  },
+  radioButtonSelected: {
+    borderColor: COLORS.primary,
+  },
+  radioButtonInner: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    backgroundColor: COLORS.primary,
+  },
+  walletUsageContainer: {
+    marginLeft: 44,
+    marginBottom: 12,
+  },
+  walletToggle: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  toggleSwitch: {
+    width: 44,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#D1D5DB',
+    padding: 2,
+    marginRight: 8,
+  },
+  toggleSwitchOn: {
+    backgroundColor: COLORS.wallet,
+  },
+  toggleSwitchDisabled: {
+    backgroundColor: '#E5E7EB',
+  },
+  toggleCircle: {
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: '#fff',
+    transform: [{ translateX: 0 }],
+  },
+  toggleCircleOn: {
+    transform: [{ translateX: 20 }],
+  },
+  walletToggleText: {
+    fontSize: 13,
+    color: COLORS.text.primary,
+  },
+  walletToggleTextDisabled: {
+    color: COLORS.text.light,
+  },
+  walletDetails: {
+    backgroundColor: '#F5F3FF',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#EDE9FE',
+  },
+  walletConversion: {
+    fontSize: 12,
+    color: COLORS.wallet,
+    marginBottom: 4,
+  },
+  walletDiscount: {
+    fontSize: 13,
+    color: COLORS.text.primary,
+    fontWeight: '500',
+    marginBottom: 2,
+  },
+  walletRemaining: {
+    fontSize: 12,
+    color: COLORS.text.secondary,
+  },
+  walletNoDiscount: {
+    fontSize: 13,
+    color: COLORS.text.secondary,
+    fontStyle: 'italic',
+  },
+  // Modal styles
+  modalContainer: {
+    flex: 1,
+    backgroundColor: COLORS.background,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: COLORS.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.border,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: COLORS.text.primary,
+  },
+  modalContent: {
+    flex: 1,
+    padding: 16,
+  },
+  modalFooter: {
+    padding: 16,
+    backgroundColor: COLORS.surface,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+  },
+  inputContainer: {
+    marginBottom: 16,
+  },
+  inputLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: COLORS.text.primary,
+    marginBottom: 6,
+  },
+  textArea: {
+    minHeight: 80,
+    textAlignVertical: 'top',
+  },
+  errorText: {
+    fontSize: 12,
+    color: COLORS.error,
+    marginTop: 4,
+  },
+  addressTypeContainer: {
+    marginBottom: 16,
+  },
+  addressTypeLabel: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: COLORS.text.primary,
+    marginBottom: 8,
+  },
+  addressTypeButtons: {
+    flexDirection: 'row',
+    gap: 8,
+  },
+  addressTypeButton: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderWidth: 1,
+    borderColor: COLORS.border,
+    borderRadius: 6,
+  },
+  addressTypeSelected: {
+    borderColor: COLORS.primary,
+    backgroundColor: '#E6F7F0',
+  },
+  addressTypeText: {
+    fontSize: 13,
+    color: COLORS.text.secondary,
+  },
+  addressTypeTextSelected: {
+    color: COLORS.primary,
+    fontWeight: '500',
+  },
+  setDefaultContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  checkbox: {
+    width: 20,
+    height: 20,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: COLORS.border,
+    marginRight: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  checkboxChecked: {
+    backgroundColor: COLORS.primary,
+    borderColor: COLORS.primary,
+  },
+  setDefaultText: {
+    fontSize: 14,
+    color: COLORS.text.primary,
+  },
+  saveAddressButton: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 14,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  saveAddressText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  // Checkout bar styles
+  checkoutContainer: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    backgroundColor: COLORS.surface,
+    padding: 16,
+    borderTopWidth: 1,
+    borderTopColor: COLORS.border,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 5,
+  },
+  restrictedWarningContainer: {
+    backgroundColor: '#FEF2F2',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#FECACA',
+  },
+  restrictedWarningText: {
+    fontSize: 14,
+    color: COLORS.error,
+    fontWeight: '500',
+    textAlign: 'center',
+  },
+  placeOrderButton: {
+    backgroundColor: COLORS.primary,
+    paddingVertical: 16,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  disabledButton: {
+    backgroundColor: COLORS.text.light,
+  },
+  placeOrderText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
 });

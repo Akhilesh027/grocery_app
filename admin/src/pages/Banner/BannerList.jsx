@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import axios from "axios";
 
 // --- Configuration Constants ---
-const API_BASE_URL = "https://grocery-c3c0.onrender.com";
+const API_BASE_URL = "http://31.97.233.212:5000";
 
 const BannerList = () => {
   const [banners, setBanners] = useState([]);

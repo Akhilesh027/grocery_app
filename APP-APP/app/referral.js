@@ -26,7 +26,7 @@ export default function ReferralScreen() {
           return;
         }
 
-        const res = await fetch(`https://grocery-c3c0.onrender.com/api/referrals/${userId}`);
+        const res = await fetch(`http://31.97.233.212:5000/api/referrals/${userId}`);
         const data = await res.json();
 
         if (!res.ok) {
@@ -95,7 +95,7 @@ export default function ReferralScreen() {
           <Text style={styles.statLabel}>Pending</Text>
         </View>
         <View style={styles.statBox}>
-          <Text style={styles.statValue}>{stats.totalEarned} 💰</Text>
+          <Text style={styles.statValue}>{stats.totalEarned} Coins</Text>
           <Text style={styles.statLabel}>Total Earned</Text>
         </View>
       </View>

@@ -9,9 +9,11 @@ import {
 } from 'react-native';
 import axios from 'axios';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useNavigation } from "@react-navigation/native";
+
 
 export default function ProductCard({ product }) {
-
+const navigation = useNavigation();
   // Calculate discount
   const discountAmount = product.mrp && product.mrp > product.price
     ? product.mrp - product.price
@@ -25,6 +27,14 @@ const handleAdd = async () => {
 
   try {
     const userId = await AsyncStorage.getItem('userId');
+if (!userId) {
+  Alert.alert(
+    "Login Required",
+    "Please log in to add items to your cart.",
+    [{ text: "OK", onPress: () => navigation.navigate("LoginScreen") }]
+  );
+  return;
+}
 
     if (!userId) {
       return Alert.alert("Login Required", "Please log in to add items to your cart.");
@@ -39,7 +49,7 @@ const handleAdd = async () => {
       quantity: 1,
     };
 
-    const response = await axios.post("https://grocery-c3c0.onrender.com/api/cart", payload);
+    const response = await axios.post("http://31.97.233.212:5000/api/cart", payload);
 
     if (response.data.success) {
       Alert.alert("Added!", `${product.title} has been added to your cart.`);
@@ -102,7 +112,7 @@ source={{ uri: product?.images?.[0] || product?.image }}
         <View style={styles.bottomRow}>
           <View style={styles.pointsContainer}>
             <Text style={styles.pointsIcon}>⭐</Text>
-            <Text style={styles.pointsText}>{product.points || 5} pts</Text>
+            <Text style={styles.pointsText}>{product.coinValue || 5} pts</Text>
           </View>
         </View>
       </View>
@@ -126,7 +136,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 0,
-    marginHorizontal: 2,
+    marginHorizontal: 0,
     flex: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 3 },
@@ -193,7 +203,7 @@ const styles = StyleSheet.create({
   },
   productInfo: {
     padding: 12,
-    paddingBottom: 45,
+    paddingBottom: 5,
     position: 'relative',
   },
   brandText: {
@@ -252,7 +262,7 @@ const styles = StyleSheet.create({
   },
   addButton: {
     position: 'absolute',
-    bottom: 10,
+    top: 10,
     right: 10,
     backgroundColor: '#FFFFFF',
     borderWidth: 2,

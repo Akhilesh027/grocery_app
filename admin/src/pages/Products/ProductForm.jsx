@@ -51,6 +51,9 @@ const ProductForm = () => {
     sku: '',
     price: '',
     mrp: '',
+    // --- NEW: Added coinValue to the product state ---
+    coinValue: 0,
+    // ------------------------------------------------
     images: [],
     inStock: true,
     stockQuantity: 0,
@@ -81,8 +84,8 @@ const ProductForm = () => {
   const fetchCategories = async () => {
     try {
       const [categoriesRes, offerCategoriesRes] = await Promise.all([
-        fetch('https://grocery-c3c0.onrender.com/api/categories'),
-        fetch('https://grocery-c3c0.onrender.com/api/offers/categories')
+        fetch('http://31.97.233.212:5000/api/categories'),
+        fetch('http://31.97.233.212:5000/api/offers/categories')
       ]);
       
       if (!categoriesRes.ok) throw new Error('Failed to fetch categories');
@@ -107,7 +110,7 @@ const ProductForm = () => {
     }
     
     try {
-      const response = await fetch(`https://grocery-c3c0.onrender.com/api/offers/subcategories/${offerCategoryId}`);
+      const response = await fetch(`http://31.97.233.212:5000/api/offers/subcategories/${offerCategoryId}`);
       if (!response.ok) throw new Error('Failed to fetch offer subcategories');
       const data = await response.json();
       setOfferSubCategories(data);
@@ -122,13 +125,16 @@ const ProductForm = () => {
     
     try {
       setLoading(true);
-      const response = await fetch(`https://grocery-c3c0.onrender.com/api/products/${id}`);
+      const response = await fetch(`http://31.97.233.212:5000/api/products/${id}`);
       if (!response.ok) throw new Error('Failed to fetch product');
       const productData = await response.json();
       
       setProduct({
         ...productData,
-        images: productData.images || []
+        images: productData.images || [],
+        // --- NEW: Ensure coinValue is loaded for edit mode ---
+        coinValue: productData.coinValue || 0,
+        // -------------------------------------------------------
       });
       
       // Set specifications
@@ -246,7 +252,7 @@ const ProductForm = () => {
     handleChange('sku', newSKU);
   };
 
- const handleSubmit = async (e) => {
+  const handleSubmit = async (e) => {
   e.preventDefault();
   
   // Validation
@@ -278,6 +284,9 @@ const ProductForm = () => {
     formData.append('sku', product.sku);
     formData.append('price', parseFloat(product.price));
     formData.append('mrp', parseFloat(product.mrp));
+    // --- NEW: Added coinValue to the form data ---
+    formData.append('coinValue', parseInt(product.coinValue) || 0);
+    // --------------------------------------------
     formData.append('description', product.description);
     formData.append('brand', product.brand);
     formData.append('mainCategory', product.category.mainCategory);
@@ -314,7 +323,7 @@ const ProductForm = () => {
       formData.append('images', file);
     });
 
-    const url = isEdit ? `https://grocery-c3c0.onrender.com/api/products/${id}` : 'https://grocery-c3c0.onrender.com/api/products';
+    const url = isEdit ? `http://31.97.233.212:5000/api/products/${id}` : 'http://31.97.233.212:5000/api/products';
     const method = isEdit ? 'PUT' : 'POST';
 
     console.log('Submitting form data...');
@@ -423,7 +432,7 @@ const ProductForm = () => {
           disabled={loading}
         />
       </Grid>
-      <Grid item xs={12} md={6}>
+      <Grid item xs={12} md={4}>
         <TextField
           fullWidth
           label="MRP *"
@@ -437,7 +446,7 @@ const ProductForm = () => {
           }}
         />
       </Grid>
-      <Grid item xs={12} md={6}>
+      <Grid item xs={12} md={4}>
         <TextField
           fullWidth
           label="Selling Price *"
@@ -451,6 +460,22 @@ const ProductForm = () => {
           }}
         />
       </Grid>
+      {/* --- NEW: Coin Value Input Field --- */}
+      <Grid item xs={12} md={4}>
+        <TextField
+          fullWidth
+          label="Coin Value"
+          type="number"
+          value={product.coinValue}
+          onChange={(e) => handleChange('coinValue', e.target.value)}
+          disabled={loading}
+          InputProps={{
+            startAdornment: <InputAdornment position="start">🪙</InputAdornment>,
+          }}
+          helperText="Coins earned by user on purchase"
+        />
+      </Grid>
+      {/* ------------------------------------- */}
       <Grid item xs={12}>
         <Card variant="outlined">
           <CardContent>
@@ -960,8 +985,6 @@ const ProductForm = () => {
           </form>
         </CardContent>
       </Card>
-
-      {/* Snackbar for notifications */}
       <Snackbar
         open={snackbar.open}
         autoHideDuration={6000}

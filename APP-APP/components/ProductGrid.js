@@ -18,14 +18,19 @@ export default function ProductGrid({ title, products, showViewAll = true }) {
           </TouchableOpacity>
         )}
       </View>
-      
-      <View style={styles.grid}>
-        {products.slice(0, 9).map((product, index) => (
+
+      {/* Horizontal Scroll Row */}
+      <ScrollView
+        horizontal
+        showsHorizontalScrollIndicator={false}
+        contentContainerStyle={styles.row}
+      >
+        {products.map((product, index) => (
           <View key={product.id || index} style={styles.productWrapper}>
             <ProductCard product={product} />
           </View>
         ))}
-      </View>
+      </ScrollView>
     </View>
   );
 }
@@ -45,22 +50,17 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: '700',
     color: '#111827',
-    letterSpacing: 0,
   },
   viewAllText: {
     fontSize: 13,
     fontWeight: '600',
     color: '#FF9933',
-    letterSpacing: 0.2,
   },
-  grid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  row: {
     paddingHorizontal: 16,
-    justifyContent: 'space-between',
   },
   productWrapper: {
-    width: '50%',
-    marginBottom: 12,
+    marginRight: 12,
+    width: 160, // You can adjust based on product card size
   },
 });

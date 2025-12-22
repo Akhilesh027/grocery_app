@@ -15,7 +15,7 @@ import axios from 'axios';
 const { width } = Dimensions.get('window');
 
 // --- Configuration Constants ---
-const API_BASE_URL = "https://grocery-c3c0.onrender.com";
+const API_BASE_URL = "http://31.97.233.212:5000";
 const API_ENDPOINT = "/api/banners";
 const AUTO_SCROLL_DELAY = 4000;
 const SCROLL_RESTART_DELAY = 2000;
@@ -118,19 +118,29 @@ export default function PromoCarousel() {
     return () => stopAutoScroll();
   }, [displayedPromos.length]); // Dependency is now on the filtered array length
 
-  const handleScrollEnd = (event) => {
-    const contentOffsetX = event.nativeEvent.contentOffset.x;
+const handleScrollEnd = (event) => {
+    // ⭐ DEFENSIVE GUARD: Ensure nativeEvent and contentOffset exist
+    const contentOffsetX = event?.nativeEvent?.contentOffset?.x;
+
+    if (contentOffsetX === undefined || displayedPromos.length === 0) {
+        // Stop processing if contentOffset.x is unavailable or there are no promos
+        return; 
+    }
+    
+    // Use Math.round to get the nearest index, not just Math.floor
     const index = Math.round(contentOffsetX / CARD_WIDTH);
     
+    // ... (rest of the logic remains the same)
     if (index !== activeIndex && index >= 0 && index < displayedPromos.length) {
       setActiveIndex(index);
     }
     
     stopAutoScroll();
     if (displayedPromos.length > 1) {
+      // Use SCROLL_RESTART_DELAY to give the user time to view the promo
       intervalRef.current = setTimeout(startAutoScroll, SCROLL_RESTART_DELAY);
     }
-  };
+};
   
   const handleTouchStart = () => {
     stopAutoScroll();
@@ -190,7 +200,7 @@ export default function PromoCarousel() {
           <TouchableOpacity
             key={promo.id}
             style={styles.promoCard}
-            onPress={() => navigation.navigate("offers", { promo })}
+onPress={() => navigation.navigate("OneRupeeDealsScreen")}
             activeOpacity={0.9}
           >
             <Image 

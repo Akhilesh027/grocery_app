@@ -1,7 +1,7 @@
 import axios from "axios";
 
 const API = axios.create({
-  baseURL: "https://grocery-c3c0.onrender.com/api", // Replace with your local IP
+  baseURL: "http://31.97.233.212:5000/api", // Replace with your local IP
 });
 
 export default API;

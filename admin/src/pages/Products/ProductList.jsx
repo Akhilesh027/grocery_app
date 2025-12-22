@@ -59,7 +59,7 @@ const ProductList = () => {
         ...(filters.stockStatus && { stockStatus: filters.stockStatus }),
       });
 
-      const response = await fetch(`https://grocery-c3c0.onrender.com/api/products?${queryParams}`);
+      const response = await fetch(`http://31.97.233.212:5000/api/products?${queryParams}`);
       if (!response.ok) throw new Error('Failed to fetch products');
       
       const data = await response.json();
@@ -74,7 +74,7 @@ const ProductList = () => {
 
   const fetchCategories = async () => {
     try {
-      const response = await fetch('https://grocery-c3c0.onrender.com/api/categories');
+      const response = await fetch('http://31.97.233.212:5000/api/categories');
       if (!response.ok) throw new Error('Failed to fetch categories');
       
       const data = await response.json();
@@ -103,7 +103,7 @@ const ProductList = () => {
 
   const handleStatusToggle = async (product) => {
     try {
-      const response = await fetch(`https://grocery-c3c0.onrender.com/api/products/${product._id}`, {
+      const response = await fetch(`http://31.97.233.212:5000/api/products/${product._id}`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',
@@ -132,7 +132,7 @@ const ProductList = () => {
   const handleDelete = async (product) => {
     if (window.confirm(`Delete product "${product.title}"?`)) {
       try {
-        const response = await fetch(`https://grocery-c3c0.onrender.com/api/products/${product._id}`, {
+        const response = await fetch(`http://31.97.233.212:5000/api/products/${product._id}`, {
           method: 'DELETE',
         });
 

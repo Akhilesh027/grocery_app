@@ -8,19 +8,29 @@ import {
   StyleSheet,
   ActivityIndicator,
   Alert,
+  Modal,
+  TextInput,
 } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation } from "@react-navigation/native";
+import { useFocusEffect } from "@react-navigation/native";
+import { useCallback } from "react";
 
 export default function CartScreen() {
   const navigation = useNavigation();
   const [cartItems, setCartItems] = useState([]);
   const [loading, setLoading] = useState(true);
-  const backendURL = "https://grocery-c3c0.onrender.com";
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [modalVisible, setModalVisible] = useState(false);
+  const [currentItem, setCurrentItem] = useState(null);
+  const [selectedSubtitle, setSelectedSubtitle] = useState(null);
+  const backendURL = "http://31.97.233.212:5000";
 
-  useEffect(() => {
-    fetchCart();
-  }, []);
+  useFocusEffect(
+    useCallback(() => {
+      fetchCart();
+    }, [])
+  );
 
   const fetchCart = async () => {
     try {
@@ -28,9 +38,12 @@ export default function CartScreen() {
       const userId = await AsyncStorage.getItem("userId");
 
       if (!userId) {
+        setIsLoggedIn(false);
         setLoading(false);
         return;
       }
+
+      setIsLoggedIn(true);
 
       const response = await fetch(`${backendURL}/api/cart/${userId}`, {
         headers: {
@@ -40,10 +53,15 @@ export default function CartScreen() {
       });
 
       const data = await response.json();
-      console.log("Cart API Response:", data); // Debug log
+      console.log("Cart API Response:", data);
 
       if (data.success) {
-        setCartItems(data.cartItems || []);
+        // Initialize subtitle for each item if it exists
+        const itemsWithSubtitle = (data.cartItems || []).map(item => ({
+          ...item,
+          selectedSubtitle: item.selectedSubtitle || null // Preserve existing selection
+        }));
+        setCartItems(itemsWithSubtitle);
       } else {
         Alert.alert("Error", data.message || "Failed to load cart");
       }
@@ -52,6 +70,60 @@ export default function CartScreen() {
       Alert.alert("Error", "Could not load cart. Please try again later.");
     } finally {
       setLoading(false);
+    }
+  };
+
+  const parseSubtitleOptions = (subtitle) => {
+    if (!subtitle) return [];
+    // Split by comma and trim whitespace
+    return subtitle.split(',').map(option => option.trim());
+  };
+
+  const showSubtitleModal = (item) => {
+    setCurrentItem(item);
+    setSelectedSubtitle(item.selectedSubtitle || null);
+    setModalVisible(true);
+  };
+
+  const saveSubtitleSelection = () => {
+    if (!currentItem) {
+      Alert.alert("Error", "No item selected");
+      return;
+    }
+
+    // Update the cart item with selected subtitle
+    const updatedItems = cartItems.map(item => {
+      if (item._id === currentItem._id) {
+        return { ...item, selectedSubtitle: selectedSubtitle || item.selectedSubtitle };
+      }
+      return item;
+    });
+
+    setCartItems(updatedItems);
+    
+    // Save to backend if a subtitle was selected
+    if (selectedSubtitle) {
+      saveSubtitleToBackend(currentItem._id, selectedSubtitle);
+    }
+    
+    setModalVisible(false);
+    setCurrentItem(null);
+    setSelectedSubtitle(null);
+  };
+
+  const saveSubtitleToBackend = async (itemId, subtitle) => {
+    try {
+      const token = await AsyncStorage.getItem("token");
+      await fetch(`${backendURL}/api/cart/update/${itemId}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ selectedSubtitle: subtitle }),
+      });
+    } catch (error) {
+      console.log("Subtitle update failed:", error);
     }
   };
 
@@ -64,12 +136,13 @@ export default function CartScreen() {
         }
         return item;
       });
+
       setCartItems(updatedItems);
 
       const token = await AsyncStorage.getItem("token");
       await fetch(`${backendURL}/api/cart/update/${itemId}`, {
         method: "PUT",
-        headers: { 
+        headers: {
           "Content-Type": "application/json",
           Authorization: `Bearer ${token}`,
         },
@@ -80,122 +153,196 @@ export default function CartScreen() {
       Alert.alert("Error", "Failed to update quantity");
     }
   };
-const removeFromCart = async (cartItem) => {
-  try {
-    const token = await AsyncStorage.getItem("token");
-    const userId = await AsyncStorage.getItem("userId");
 
-    if (!userId) {
-      Alert.alert("Error", "User not found");
-      return;
-    }
+  const removeFromCart = async (cartItem) => {
+    try {
+      const token = await AsyncStorage.getItem("token");
+      const userId = await AsyncStorage.getItem("userId");
 
-    const productId = cartItem.productId._id; // extracting productId
-
-    const response = await fetch(
-      `${backendURL}/api/cart/${userId}/${productId}`,
-      {
-        method: "DELETE",
-        headers: {
-          Authorization: `Bearer ${token}`,
-          "Content-Type": "application/json",
-        },
+      if (!userId) {
+        Alert.alert("Error", "User not found");
+        return;
       }
-    );
 
-    const data = await response.json();
+      const productId = cartItem.productId._id;
 
-    if (data.success) {
-      setCartItems(cartItems.filter((item) => item.productId._id !== productId));
-      Alert.alert("Success", "Item removed from cart");
-    } else {
-      Alert.alert("Error", data.message || "Failed to remove item");
+      const response = await fetch(
+        `${backendURL}/api/cart/${userId}/${productId}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      const data = await response.json();
+
+      if (data.success) {
+        setCartItems(cartItems.filter((item) => item.productId._id !== productId));
+        Alert.alert("Success", "Item removed from cart");
+      } else {
+        Alert.alert("Error", data.message || "Failed to remove item");
+      }
+    } catch (error) {
+      console.error("Remove failed:", error);
+      Alert.alert("Error", "Failed to remove item");
     }
-  } catch (error) {
-    console.error("Remove failed:", error);
-    Alert.alert("Error", "Failed to remove item");
-  }
-};
-
-
-  // Safe price access function
-  const getItemPrice = (item) => {
-    // Try different possible price locations
-    if (item.price) return item.price;
-    if (item.productId?.price) return item.productId.price;
-    if (item.product?.price) return item.product.price;
-    return 0;
   };
 
-  // Safe image access function
-  const getItemImage = (item) => {
-    if (item.image) return item.image;
-    if (item.productId?.image) return item.productId.image;
-    if (item.productId?.images?.[0]) return item.productId.images[0];
-    if (item.product?.images?.[0]) return item.product.images[0];
-    if (item.images?.[0]) return item.images[0];
-    return "https://via.placeholder.com/100x100?text=No+Image";
-  };
+  const getItemPrice = (item) =>
+    item.price || item.productId?.price || item.product?.price || 0;
 
-  // Safe title access function
-  const getItemTitle = (item) => {
-    if (item.title) return item.title;
-    if (item.productId?.title) return item.productId.title;
-    if (item.product?.title) return item.product.title;
-    return "Unknown Product";
+  const getItemImage = (item) =>
+    item.image ||
+    item.productId?.image ||
+    item.productId?.images?.[0] ||
+    item.product?.images?.[0] ||
+    item.images?.[0] ||
+    "https://via.placeholder.com/100x100?text=No+Image";
+
+  const getItemTitle = (item) =>
+    item.title || item.productId?.title || item.product?.title || "Unknown Product";
+
+  const getItemSubtitle = (item) =>
+    item.subtitle || item.productId?.subtitle || item.product?.subtitle || null;
+
+  const getItemDisplayText = (item) => {
+    const title = getItemTitle(item);
+    const subtitle = getItemSubtitle(item);
+    
+    if (subtitle && subtitle.includes(',')) {
+      // Show first option as default before selection
+      const options = parseSubtitleOptions(subtitle);
+      return `${title} (${item.selectedSubtitle || options[0] || ''})`;
+    }
+    
+    return subtitle ? `${title} (${subtitle})` : title;
   };
 
   const getTotal = () => {
     const total = cartItems.reduce((sum, item) => {
       const price = getItemPrice(item);
       const quantity = item.quantity || 1;
-      return sum + (parseFloat(price) || 0) * quantity;
+      return sum + price * quantity;
     }, 0);
-    
+
     return total.toFixed(2);
+  };
+
+  const validateCartForCheckout = () => {
+    return true; // All items now have a default selection
+  };
+
+  const handleCheckout = async () => {
+    const userId = await AsyncStorage.getItem("userId");
+    if (!userId) return Alert.alert("Login Required", "Please login to checkout");
+
+    if (cartItems.length === 0)
+      return Alert.alert("Cart Empty", "Add items before checkout");
+
+    // Prepare cart items with selected subtitles or default first option
+    const checkoutItems = cartItems.map(item => {
+      const subtitle = getItemSubtitle(item);
+      let finalSubtitle = '';
+      
+      if (subtitle && subtitle.includes(',')) {
+        const options = parseSubtitleOptions(subtitle);
+        finalSubtitle = item.selectedSubtitle || options[0] || '';
+      } else {
+        finalSubtitle = item.selectedSubtitle || subtitle || '';
+      }
+      
+      return {
+        ...item,
+        subtitle: finalSubtitle
+      };
+    });
+
+    navigation.navigate("checkout", {
+      cartItems: checkoutItems,
+      total: getTotal(),
+      userId,
+    });
   };
 
   const renderItem = ({ item }) => {
     const price = getItemPrice(item);
     const image = getItemImage(item);
     const title = getItemTitle(item);
+    const subtitle = getItemSubtitle(item);
     const quantity = item.quantity || 1;
+    const hasSubtitleOptions = subtitle && subtitle.includes(',');
+    const displayText = getItemDisplayText(item);
 
     return (
       <View style={styles.card}>
-        <Image
-          source={{ uri: image }}
-          style={styles.image}
-          resizeMode="contain"
-          onError={() => console.log("Image load error for:", image)}
-        />
+        <Image source={{ uri: image }} style={styles.image} resizeMode="contain" />
         <View style={styles.details}>
-          <Text style={styles.title} numberOfLines={2}>{title}</Text>
+          <Text style={styles.title}>{displayText}</Text>
+          
+          {hasSubtitleOptions && (
+            <TouchableOpacity 
+              style={styles.subtitleContainer}
+              onPress={() => showSubtitleModal(item)}
+            >
+              <Text style={styles.subtitleLabel}>Options:</Text>
+              <View style={styles.subtitleOptions}>
+                {parseSubtitleOptions(subtitle).map((option, index) => (
+                  <TouchableOpacity
+                    key={index}
+                    style={[
+                      styles.subtitleOption,
+                      (item.selectedSubtitle === option || (!item.selectedSubtitle && index === 0)) && 
+                      styles.subtitleOptionSelected
+                    ]}
+                    onPress={() => {
+                      // Update selection immediately without modal
+                      const updatedItems = cartItems.map(cartItem => {
+                        if (cartItem._id === item._id) {
+                          return { ...cartItem, selectedSubtitle: option };
+                        }
+                        return cartItem;
+                      });
+                      setCartItems(updatedItems);
+                      saveSubtitleToBackend(item._id, option);
+                    }}
+                  >
+                    <Text style={[
+                      styles.subtitleOptionText,
+                      (item.selectedSubtitle === option || (!item.selectedSubtitle && index === 0)) && 
+                      styles.subtitleOptionTextSelected
+                    ]}>
+                      {option}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+                <TouchableOpacity
+                  style={styles.moreOptionsButton}
+                  onPress={() => showSubtitleModal(item)}
+                >
+                  <Text style={styles.moreOptionsText}>⋯</Text>
+                </TouchableOpacity>
+              </View>
+            </TouchableOpacity>
+          )}
+          
           <Text style={styles.price}>₹{price}</Text>
 
           <View style={styles.quantityContainer}>
-            <TouchableOpacity
-              style={styles.qtyButton}
-              onPress={() => updateQuantity(item._id, -1)}
-            >
+            <TouchableOpacity style={styles.qtyButton} onPress={() => updateQuantity(item._id, -1)}>
               <Text style={styles.qtyText}>-</Text>
             </TouchableOpacity>
 
             <Text style={styles.qtyValue}>{quantity}</Text>
 
-            <TouchableOpacity
-              style={styles.qtyButton}
-              onPress={() => updateQuantity(item._id, +1)}
-            >
+            <TouchableOpacity style={styles.qtyButton} onPress={() => updateQuantity(item._id, +1)}>
               <Text style={styles.qtyText}>+</Text>
             </TouchableOpacity>
           </View>
 
-          <TouchableOpacity
-            onPress={() => removeFromCart(item)}
-
-            style={styles.removeButton}
-          >
+          <TouchableOpacity style={styles.removeButton} onPress={() => removeFromCart(item)}>
             <Text style={styles.removeText}>Remove</Text>
           </TouchableOpacity>
         </View>
@@ -203,28 +350,68 @@ const removeFromCart = async (cartItem) => {
     );
   };
 
-  const handleCheckout = async () => {
-    const userId = await AsyncStorage.getItem("userId");
-    if (!userId) {
-      Alert.alert("Login Required", "Please login to proceed with checkout");
-      return;
-    }
+  const renderSubtitleModal = () => {
+    if (!currentItem) return null;
+    
+    const subtitle = getItemSubtitle(currentItem);
+    const options = parseSubtitleOptions(subtitle);
+    const title = getItemTitle(currentItem);
 
-    if (cartItems.length === 0) {
-      Alert.alert("Cart Empty", "Please add items to cart before checkout");
-      return;
-    }
-
-    navigation.navigate('checkout', {
-      cartItems: cartItems.map(item => ({
-        ...item,
-        price: getItemPrice(item),
-        image: getItemImage(item),
-        title: getItemTitle(item)
-      })),
-      total: getTotal(),
-      userId,
-    });
+    return (
+      <Modal
+        animationType="slide"
+        transparent={true}
+        visible={modalVisible}
+        onRequestClose={() => setModalVisible(false)}
+      >
+        <View style={styles.modalContainer}>
+          <View style={styles.modalContent}>
+            <Text style={styles.modalTitle}>{title}</Text>
+            <Text style={styles.modalSubtitle}>Select Option:</Text>
+            
+            {options.map((option, index) => (
+              <TouchableOpacity
+                key={index}
+                style={[
+                  styles.optionButton,
+                  (selectedSubtitle === option || (currentItem.selectedSubtitle === option && !selectedSubtitle)) && 
+                  styles.optionButtonSelected
+                ]}
+                onPress={() => setSelectedSubtitle(option)}
+              >
+                <Text style={[
+                  styles.optionText,
+                  (selectedSubtitle === option || (currentItem.selectedSubtitle === option && !selectedSubtitle)) && 
+                  styles.optionTextSelected
+                ]}>
+                  {option}
+                </Text>
+              </TouchableOpacity>
+            ))}
+            
+            <View style={styles.modalButtons}>
+              <TouchableOpacity 
+                style={[styles.modalButton, styles.cancelButton]}
+                onPress={() => {
+                  setModalVisible(false);
+                  setCurrentItem(null);
+                  setSelectedSubtitle(null);
+                }}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.modalButton, styles.saveButton]}
+                onPress={saveSubtitleSelection}
+              >
+                <Text style={styles.saveButtonText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+    );
   };
 
   if (loading) {
@@ -240,12 +427,22 @@ const removeFromCart = async (cartItem) => {
     <View style={styles.container}>
       <Text style={styles.header}>My Cart</Text>
 
-      {cartItems.length === 0 ? (
+      {!isLoggedIn ? (
+        <View style={styles.emptyContainer}>
+          <Text style={styles.emptyText}>Please log in to view your cart</Text>
+          <TouchableOpacity
+            style={styles.continueShoppingButton}
+            onPress={() => navigation.navigate("LoginScreen")}
+          >
+            <Text style={styles.continueShoppingText}>Login</Text>
+          </TouchableOpacity>
+        </View>
+      ) : cartItems.length === 0 ? (
         <View style={styles.emptyContainer}>
           <Text style={styles.emptyText}>🛒 Your cart is empty</Text>
-          <TouchableOpacity 
+          <TouchableOpacity
             style={styles.continueShoppingButton}
-            onPress={() => navigation.navigate('Home')}
+            onPress={() => navigation.navigate("Home")}
           >
             <Text style={styles.continueShoppingText}>Continue Shopping</Text>
           </TouchableOpacity>
@@ -254,7 +451,7 @@ const removeFromCart = async (cartItem) => {
         <>
           <FlatList
             data={cartItems}
-            keyExtractor={(item) => item._id || Math.random().toString()}
+            keyExtractor={(item) => item._id}
             renderItem={renderItem}
             contentContainerStyle={styles.list}
             showsVerticalScrollIndicator={false}
@@ -262,82 +459,89 @@ const removeFromCart = async (cartItem) => {
 
           <View style={styles.footer}>
             <View style={styles.totalContainer}>
-              <Text style={styles.totalLabel}>Total Amount:</Text>
+              <Text style={styles.totalLabel}>Total:</Text>
               <Text style={styles.totalText}>₹{getTotal()}</Text>
             </View>
-            <TouchableOpacity
-              style={styles.checkoutButton}
-              onPress={handleCheckout}
-            >
+            <TouchableOpacity style={styles.checkoutButton} onPress={handleCheckout}>
               <Text style={styles.checkoutText}>Proceed to Checkout</Text>
             </TouchableOpacity>
           </View>
         </>
       )}
+      
+      {renderSubtitleModal()}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  container: { 
-    flex: 1, 
-    backgroundColor: "#fff", 
-    paddingTop: 50 
-  },
-  header: { 
-    fontSize: 24, 
-    fontWeight: "bold", 
-    textAlign: "center", 
-    marginBottom: 10,
-    color: "#333"
-  },
-  list: { 
-    paddingHorizontal: 16, 
-    paddingBottom: 100 
-  },
+  container: { flex: 1, backgroundColor: "#fff", paddingTop: 50 },
+  header: { fontSize: 24, fontWeight: "bold", textAlign: "center", marginBottom: 10 },
+  list: { paddingHorizontal: 16, paddingBottom: 100 },
   card: {
     flexDirection: "row",
     backgroundColor: "#FFFFFF",
     borderRadius: 12,
     marginBottom: 12,
     padding: 12,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
+    elevation: 2,
     borderWidth: 1,
-    borderColor: "#F0F0F0",
+    borderColor: "#eee",
   },
-  image: { 
-    width: 80, 
-    height: 80, 
-    borderRadius: 8,
-    backgroundColor: "#F5F5F5"
+  image: { width: 80, height: 80, borderRadius: 8, backgroundColor: "#F5F5F5" },
+  details: { flex: 1, marginLeft: 12, justifyContent: "space-between" },
+  title: { fontSize: 16, fontWeight: "600", color: "#333", marginBottom: 4 },
+  subtitleContainer: {
+    marginBottom: 8,
   },
-  details: { 
-    flex: 1, 
-    marginLeft: 12, 
-    justifyContent: "space-between" 
+  subtitleLabel: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#666",
+    marginBottom: 4,
   },
-  title: { 
-    fontSize: 16, 
-    fontWeight: "600", 
+  subtitleOptions: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    alignItems: "center",
+  },
+  subtitleOption: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    marginRight: 8,
+    marginBottom: 8,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    backgroundColor: "#f9f9f9",
+  },
+  subtitleOptionSelected: {
+    borderColor: "#00A86B",
+    backgroundColor: "#E8F5E9",
+  },
+  subtitleOptionText: {
+    fontSize: 14,
     color: "#333",
-    lineHeight: 20,
-    marginBottom: 4
   },
-  price: { 
-    fontSize: 18, 
-    fontWeight: "700", 
+  subtitleOptionTextSelected: {
     color: "#00A86B",
-    marginBottom: 8
+    fontWeight: "600",
   },
-  quantityContainer: { 
-    flexDirection: "row", 
-    alignItems: "center", 
-    marginTop: 8 
+  moreOptionsButton: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    backgroundColor: "#f9f9f9",
   },
+  moreOptionsText: {
+    fontSize: 14,
+    fontWeight: "bold",
+    color: "#666",
+  },
+  price: { fontSize: 18, fontWeight: "700", color: "#00A86B", marginTop: 4 },
+  quantityContainer: { flexDirection: "row", alignItems: "center", marginTop: 8 },
   qtyButton: {
     width: 32,
     height: 32,
@@ -346,103 +550,103 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#F8FFF8"
   },
-  qtyText: { 
-    fontSize: 18, 
-    color: "#00A86B", 
-    fontWeight: "bold",
-    lineHeight: 20
-  },
-  qtyValue: { 
-    fontSize: 16, 
-    marginHorizontal: 12,
-    fontWeight: "600",
-    minWidth: 20,
-    textAlign: "center"
-  },
-  removeButton: { 
-    marginTop: 8,
-    alignSelf: "flex-start"
-  },
-  removeText: { 
-    color: "#FF4444", 
-    fontSize: 14, 
-    fontWeight: "500" 
-  },
+  qtyText: { fontSize: 18, color: "#00A86B", fontWeight: "bold" },
+  qtyValue: { fontSize: 16, marginHorizontal: 12, fontWeight: "600" },
+  removeButton: { marginTop: 8 },
+  removeText: { color: "#FF4444", fontWeight: "600" },
   footer: {
     position: "absolute",
     bottom: 0,
-    left: 0,
-    right: 0,
+    width: "100%",
     backgroundColor: "#fff",
     padding: 16,
     borderTopWidth: 1,
-    borderColor: "#eee",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 5,
+    borderColor: "#ddd",
   },
-  totalContainer: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 12,
+  totalContainer: { flexDirection: "row", justifyContent: "space-between", marginBottom: 12 },
+  totalLabel: { fontSize: 16, fontWeight: "600" },
+  totalText: { fontSize: 20, fontWeight: "700" },
+  checkoutButton: { backgroundColor: "#00A86B", padding: 12, borderRadius: 8, alignItems: "center" },
+  checkoutText: { color: "#fff", fontSize: 16, fontWeight: "700" },
+  emptyContainer: { flex: 1, justifyContent: "center", alignItems: "center", paddingHorizontal: 40 },
+  emptyText: { fontSize: 18, color: "#666", marginBottom: 20, textAlign: "center" },
+  continueShoppingButton: { backgroundColor: "#00A86B", paddingHorizontal: 24, paddingVertical: 12, borderRadius: 8 },
+  continueShoppingText: { color: "#fff", fontWeight: "700", fontSize: 16 },
+  loader: { flex: 1, justifyContent: "center", alignItems: "center" },
+  loadingText: { marginTop: 12, color: "#666", fontSize: 16 },
+  // Modal styles
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    padding: 20,
   },
-  totalLabel: {
+  modalContent: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    padding: 20,
+    width: '90%',
+    maxWidth: 400,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  modalSubtitle: {
     fontSize: 16,
-    fontWeight: "600",
-    color: "#666"
+    fontWeight: '600',
+    marginBottom: 15,
+    color: '#333',
   },
-  totalText: { 
-    fontSize: 20, 
-    fontWeight: "700", 
-    color: "#111" 
-  },
-  checkoutButton: {
-    backgroundColor: "#00A86B",
-    paddingVertical: 14,
+  optionButton: {
+    padding: 12,
+    marginVertical: 6,
     borderRadius: 8,
-    alignItems: "center",
+    borderWidth: 1,
+    borderColor: '#ddd',
+    backgroundColor: '#f9f9f9',
   },
-  checkoutText: { 
-    color: "#fff", 
-    fontWeight: "bold", 
-    fontSize: 16 
+  optionButtonSelected: {
+    borderColor: '#00A86B',
+    backgroundColor: '#E8F5E9',
   },
-  emptyContainer: { 
-    flex: 1, 
-    justifyContent: "center", 
-    alignItems: "center",
-    paddingHorizontal: 40
+  optionText: {
+    fontSize: 16,
+    textAlign: 'center',
+    color: '#333',
   },
-  emptyText: { 
-    fontSize: 18, 
-    color: "#666",
-    marginBottom: 20,
-    textAlign: "center"
+  optionTextSelected: {
+    color: '#00A86B',
+    fontWeight: 'bold',
   },
-  continueShoppingButton: {
-    backgroundColor: "#00A86B",
-    paddingHorizontal: 24,
-    paddingVertical: 12,
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 20,
+  },
+  modalButton: {
+    flex: 1,
+    padding: 12,
     borderRadius: 8,
+    alignItems: 'center',
+    marginHorizontal: 5,
   },
-  continueShoppingText: {
-    color: "#fff",
-    fontWeight: "600",
-    fontSize: 16,
+  cancelButton: {
+    backgroundColor: '#f0f0f0',
   },
-  loader: { 
-    flex: 1, 
-    justifyContent: "center", 
-    alignItems: "center" 
+  saveButton: {
+    backgroundColor: '#00A86B',
   },
-  loadingText: {
-    marginTop: 12,
-    fontSize: 16,
-    color: "#666",
+  cancelButtonText: {
+    color: '#333',
+    fontWeight: '600',
+  },
+  saveButtonText: {
+    color: 'white',
+    fontWeight: '600',
   },
 });

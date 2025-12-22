@@ -23,7 +23,8 @@ export default function RootLayout() {
             shadowRadius: 4,
             elevation: 8,
           },
-          tabBarActiveTintColor: '#10B981',
+          // Green color for active tab
+          tabBarActiveTintColor: '#10B981', 
           tabBarInactiveTintColor: '#9CA3AF',
           tabBarLabelStyle: {
             fontSize: 12,
@@ -33,46 +34,69 @@ export default function RootLayout() {
             paddingBottom: 2,
           },
         }}>
-        {/* ONLY THESE 5 TABS SHOULD BE VISIBLE IN FOOTER */}
+        
+        {/* ======================================================= */}
+        {/* VISIBILE TABS (5 TOTAL)                     */}
+        {/* ======================================================= */}
+        
+        {/* 1. Home */}
         <Tabs.Screen
           name="index"
           options={{
             title: 'Home',
-            tabBarIcon: ({ focused, color }) => (
+            tabBarIcon: ({ focused }) => (
               <View style={{alignItems: 'center', justifyContent: 'center'}}>
                 <Text style={{fontSize: 20, color: focused ? '#10B981' : '#9CA3AF'}}>🏠</Text>
               </View>
             ),
           }}
         />
+        
+        {/* 2. Categories */}
         <Tabs.Screen
           name="categories"
           options={{
             title: 'Category',
-            tabBarIcon: ({ focused, color }) => (
+            tabBarIcon: ({ focused }) => (
               <View style={{alignItems: 'center', justifyContent: 'center'}}>
                 <Text style={{fontSize: 20, color: focused ? '#10B981' : '#9CA3AF'}}>📋</Text>
               </View>
             ),
           }}
         />
+        
+        {/* 3. Offers */}
         <Tabs.Screen
           name="offers"
           options={{
             title: 'Offers',
-            tabBarIcon: ({ focused, color }) => (
+            tabBarIcon: ({ focused }) => (
               <View style={{alignItems: 'center', justifyContent: 'center'}}>
                 <Text style={{fontSize: 20, color: focused ? '#10B981' : '#9CA3AF'}}>🎁</Text>
               </View>
             ),
           }}
         />
-       
+        
+        {/* 4. Cart (New/Updated Visible Tab) */}
+        <Tabs.Screen
+          name="cart" // Assumes you have app/cart.js
+          options={{
+            title: 'Cart',
+            tabBarIcon: ({ focused }) => (
+              <View style={{alignItems: 'center', justifyContent: 'center'}}>
+                <Text style={{fontSize: 20, color: focused ? '#10B981' : '#9CA3AF'}}>🛒</Text>
+              </View>
+            ),
+          }}
+        />
+
+        {/* 5. Account */}
         <Tabs.Screen
           name="account"
           options={{
             title: 'Account',
-            tabBarIcon: ({ focused, color }) => (
+            tabBarIcon: ({ focused }) => (
               <View style={{alignItems: 'center', justifyContent: 'center'}}>
                 <Text style={{fontSize: 20, color: focused ? '#10B981' : '#9CA3AF'}}>👤</Text>
               </View>
@@ -80,10 +104,13 @@ export default function RootLayout() {
           }}
         />
         
-        {/* HIDE ALL OTHER SCREENS - INCLUDING DYNAMIC ROUTES */}
+        {/* ======================================================= */}
+        {/* HIDDEN/MODAL SCREENS (href: null)           */}
+        {/* Note: The original 'cart' entry is no longer hidden  */}
+        {/* ======================================================= */}
+        
         <Tabs.Screen name="category/[id]" options={{ href: null }} />
         <Tabs.Screen name="category/[id]/[subId]" options={{ href: null }} />
-        <Tabs.Screen name="cart" options={{ href: null }} />
         <Tabs.Screen name="checkout" options={{ href: null }} />
         <Tabs.Screen name="orders" options={{ href: null }} />
         <Tabs.Screen name="product-detail" options={{ href: null }} />
@@ -93,12 +120,15 @@ export default function RootLayout() {
         <Tabs.Screen name="+not-found" options={{ href: null }} />
         <Tabs.Screen name="SignupScreen" options={{ href: null }} />
         <Tabs.Screen name="LoginScreen" options={{ href: null }} />
+        <Tabs.Screen name="OneRupeeDealsScreen" options={{ href: null }} />
         <Tabs.Screen name="SearchScreen" options={{ href: null }} />
         <Tabs.Screen name="AccountSection" options={{ href: null }} />
         <Tabs.Screen name="OrderSuccess" options={{ href: null }} />
+        <Tabs.Screen name="SingleCategory" options={{ href: null }} />
+
       </Tabs>
       <StatusBar style="dark" />
-    </View>
+      </View>
     </CategoryNavigationProvider>
   );
 }

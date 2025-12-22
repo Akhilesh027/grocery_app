@@ -23,6 +23,8 @@ import InventoryReport from './pages/Reports/InventoryReport.jsx';
 import BannerList from './pages/Banner/BannerList.jsx';
 import AddBanner from './pages/Banner/Addbanner.jsx';
 import Notification from './pages/Notification/notification.js'
+import ReferralManagement from './pages/Notification/Referalmanagment.js';
+import CouponManagement from './pages/Coupon/Coupon.js';
 // Theme Configuration
 const theme = createTheme({
   palette: {
@@ -91,6 +93,8 @@ function App() {
                 <Route path="/banner" element={<BannerList />} />
                 <Route path="/banner/add" element={<AddBanner />} />
                 <Route path="/notification" element={<Notification />} />
+                <Route path="/referal" element={<ReferralManagement />} />
+                <Route path="/coupon" element={<CouponManagement />} />
 
                 {/* Fallback route */}
                 <Route path="*" element={<Navigate to="/dashboard" replace />} />

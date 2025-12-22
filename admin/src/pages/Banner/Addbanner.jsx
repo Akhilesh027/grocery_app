@@ -50,7 +50,7 @@ const AddBanner = () => {
     formData.append("image", image);
 
     try {
-      const response = await axios.post("https://grocery-c3c0.onrender.com/api/banner", formData, {
+      const response = await axios.post("http://31.97.233.212:5000/api/banner", formData, {
         headers: { 
           "Content-Type": "multipart/form-data",
         },

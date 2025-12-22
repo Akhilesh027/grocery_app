@@ -13,10 +13,7 @@ export default function AccountScreen() {
   const sidebarCategories = [
     { id: 'profile', title: 'My Profile', icon: '👤', screen: 'AccountSection' },
     { id: 'orders', title: 'My Orders', icon: '📦', screen: 'orders' },
-    { id: 'addresses', title: 'Addresses', icon: '📍', screen: 'AddressScreen' },
-    { id: 'payments', title: 'Payment Methods', icon: '💳', screen: 'PaymentScreen' },
     { id: 'refer', title: 'Refer & Earn', icon: '🎁', screen: 'referral' },
-    { id: 'notifications', title: 'Notifications', icon: '🔔', screen: 'NotificationsScreen' },
     { id: 'support', title: 'Help & Support', icon: '❓', screen: 'SupportScreen' },
     { id: 'about', title: 'About', icon: 'ℹ️', screen: 'AboutScreen' },
   ];
@@ -48,6 +45,7 @@ export default function AccountScreen() {
     try {
       await AsyncStorage.removeItem('token');
       await AsyncStorage.removeItem('user');
+      await AsyncStorage.removeItem('userId');
       setIsLoggedIn(false);
       setUser(null);
       Alert.alert('Logout Successful', 'You have been logged out.');
@@ -134,9 +132,7 @@ export default function AccountScreen() {
         </TouchableOpacity>
         <Text style={styles.headerTitle}>My Account</Text>
         <View style={styles.headerRight}>
-          <TouchableOpacity style={styles.searchButton}>
-            <Text style={styles.searchIcon}>🔍</Text>
-          </TouchableOpacity>
+        
           <TouchableOpacity
             style={styles.cartButton}
             onPress={() => navigation.navigate('cart')}

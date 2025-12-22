@@ -4,7 +4,7 @@ import { useRouter } from 'expo-router';
 import { useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_BASE_URL = 'https://grocery-c3c0.onrender.com/api';
+const API_BASE_URL = 'http://31.97.233.212:5000/api';
 
 // Properly define colors object
 const colors = {
@@ -507,7 +507,6 @@ export default function AccountPage() {
                       <View style={styles.orderStatus}>
                         {getOrderStatusIcon(order.orderStatus)}
                         <Text style={[styles.statusText, { color: getOrderStatusColor(order.orderStatus) }]}>
-                          {order.orderStatus.charAt(0).toUpperCase() + order.orderStatus.slice(1)}
                         </Text>
                       </View>
                     </View>

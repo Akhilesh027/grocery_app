@@ -1,373 +1,422 @@
 import { 
   View, Text, StyleSheet, ScrollView, TouchableOpacity, SafeAreaView, 
-  ActivityIndicator, PermissionsAndroid, Platform, Alert, Modal 
+  ActivityIndicator, Modal, Dimensions, Image
 } from 'react-native';
 
 import { useState, useEffect, useRef } from 'react';
 import axios from 'axios';
-import Geolocation from 'react-native-geolocation-service';
 
 import { HeaderBackground } from '../components/HeaderBackground';
 import PromoCarousel from '../components/PromoCarousel';
 import CategoryGrid from '../components/CategoryGrid';
-import CategoryGrid3x3 from '../components/CategoryGrid3x3';
 import ProductGrid from '../components/ProductGrid';
-import VendorImageGrid from '../components/VendorImageGrid';
 import BannerAd from '../components/BannerAd';
 import SupportSection from '../components/SupportSection';
 import AdvertisementBanner from '../components/AdvertisementBanner';
-import BrandSpotlight from '../components/BrandSpotlight';
 import { useNavigation } from "@react-navigation/native";
+import { useCategoryNavigation } from '../context/CategoryNavigationContext';
+
+const { width } = Dimensions.get('window');
+const API_BASE_URL = 'http://31.97.233.212:5000/api';
+const CARD_WIDTH = (width - 60) / 3; 
 
 export default function HomeScreen() {
-  const [isVendorMode, setIsVendorMode] = useState(false);
+  const navigation = useNavigation();
+  const { navigateToCategory } = useCategoryNavigation();
+  
   const [loading, setLoading] = useState(true);
-  const [locationLoading, setLocationLoading] = useState(false);
-  const [products, setProducts] = useState([]);
+  const [allProducts, setAllProducts] = useState([]); 
+  const [allCategories, setAllCategories] = useState([]); 
+  const [firstCategorySection, setFirstCategorySection] = useState(null);
+  const [secondCategorySection, setSecondCategorySection] = useState(null);
   const [error, setError] = useState('');
-    const navigation = useNavigation();
-
-  // Location state
-  const [location, setLocation] = useState({
-    address: "Fetching your location...",
-    pincode: "",
-    latitude: null,
-    longitude: null
-  });
-
-  const [watchId, setWatchId] = useState(null);
-  const currentVendorId = 'vendor1';
-
-  // ====================== IMPROVED NOTIFICATION STATE ======================
+  
+  // Deals & Filters
+  const [allTopSelling, setAllTopSelling] = useState([]);
+  const [allTodaysDeals, setAllTodaysDeals] = useState([]); 
+  
+  // Notification states
   const [notifications, setNotifications] = useState([]);
   const [showNotifications, setShowNotifications] = useState(false);
   const [unreadCount, setUnreadCount] = useState(0);
   const notificationIntervalRef = useRef(null);
+  const currentVendorId = 'vendor1';
+// ---------------- NOTIFICATION LOGIC ----------------
 
-  // Improved notification fetch with better error handling
-  const fetchAllNotifications = async () => {
-    try {
-      const res = await axios.get("https://grocery-c3c0.onrender.com/api/notifications/latest");
-      const fetchedNotifications = res.data.notifications || [];
-      setNotifications(fetchedNotifications);
-      
-      // Calculate unread count (you might want to add 'read' property to your notifications)
-      const unread = fetchedNotifications.filter(notif => !notif.read).length;
+const fetchAllNotifications = async () => {
+  try {
+    const res = await axios.get(`${API_BASE_URL}/notifications`);
+
+    if (res.data.success) {
+      const list = res.data.notifications || [];
+      setNotifications(list);
+
+      const unread = list.filter(n => !n.read).length;
       setUnreadCount(unread);
-    } catch (err) {
-      console.log("Notifications fetch error:", err);
-      setNotifications([{ 
-        id: 'error', 
-        message: "Failed to load notifications", 
-        timestamp: new Date().toISOString(),
-        type: 'error'
-      }]);
     }
-  };
+  } catch (err) {
+    console.log("Fetch notifications error:", err.message);
+  }
+};
 
-  // Mark notification as read
-  const markAsRead = async (notificationId) => {
-    try {
-      await axios.patch(`https://grocery-c3c0.onrender.com/api/notifications/${notificationId}/read`);
-      setUnreadCount(prev => Math.max(0, prev - 1));
-    } catch (err) {
-      console.log("Mark as read error:", err);
-    }
-  };
+const markAsRead = async (id) => {
+  try {
+    await axios.patch(`${API_BASE_URL}/notifications/${id}/read`);
 
-  // Mark all as read
-  const markAllAsRead = async () => {
-    try {
-      await axios.patch("https://grocery-c3c0.onrender.com/api/notifications/mark-all-read");
-      setUnreadCount(0);
-    } catch (err) {
-      console.log("Mark all as read error:", err);
-    }
-  };
-
-  // ====================== IMPROVED LOCATION HANDLING ======================
-  const requestLocationPermission = async () => {
-    if (Platform.OS === 'android') {
-      try {
-        const granted = await PermissionsAndroid.request(
-          PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-          {
-            title: 'Location Permission',
-            message: 'This app needs access to your location to show nearby products and services.',
-            buttonNeutral: 'Ask Me Later',
-            buttonNegative: 'Cancel',
-            buttonPositive: 'OK',
-          }
-        );
-        return granted === PermissionsAndroid.RESULTS.GRANTED;
-      } catch (err) {
-        console.warn(err);
-        return false;
-      }
-    }
-    return true;
-  };
-
-  const getAddressFromCoordinates = async (latitude, longitude) => {
-    try {
-      const response = await axios.get(
-        `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&zoom=18&addressdetails=1`
-      );
-      
-      if (response.data) {
-        const address = response.data.address;
-        let displayAddress = '';
-        
-        if (address.road) displayAddress += address.road + ', ';
-        if (address.suburb) displayAddress += address.suburb + ', ';
-        if (address.city) displayAddress += address.city + ', ';
-        if (address.state) displayAddress += address.state;
-        
-        const pincode = address.postcode || '';
-        
-        setLocation({
-          address: displayAddress || 'Location found',
-          pincode: pincode,
-          latitude: latitude,
-          longitude: longitude
-        });
-      }
-    } catch (error) {
-      console.log('Error getting address:', error);
-      setLocation(prev => ({
-        ...prev,
-        address: 'Location found (address unavailable)',
-        pincode: ''
-      }));
-    }
-  };
-
-  // Improved location tracking with better error handling
-  const getCurrentLocation = () => {
-    return new Promise((resolve, reject) => {
-      setLocationLoading(true);
-      
-      Geolocation.getCurrentPosition(
-        (position) => {
-          const { latitude, longitude } = position.coords;
-          getAddressFromCoordinates(latitude, longitude);
-          setLocationLoading(false);
-          resolve({ latitude, longitude });
-        },
-        (error) => {
-          console.log('Error getting location:', error);
-          setLocation({
-            address: "Unable to get location",
-            pincode: "",
-            latitude: null,
-            longitude: null
-          });
-          setLocationLoading(false);
-          reject(error);
-        },
-        {
-          enableHighAccuracy: true,
-          timeout: 20000, // Increased timeout
-          maximumAge: 60000 // 1 minute cache
-        }
-      );
-    });
-  };
-
-  // Improved live location tracking
-  const startLiveLocationTracking = () => {
-    try {
-      const id = Geolocation.watchPosition(
-        (position) => {
-          const { latitude, longitude } = position.coords;
-          console.log('Live location update:', { latitude, longitude });
-          getAddressFromCoordinates(latitude, longitude);
-        },
-        (error) => {
-          console.log('Live location error:', error);
-          // Attempt to restart location tracking on error
-          setTimeout(() => {
-            stopLiveLocationTracking();
-            startLiveLocationTracking();
-          }, 5000);
-        },
-        {
-          enableHighAccuracy: true,
-          distanceFilter: 50, // More frequent updates (50 meters)
-          interval: 10000,    // 10 seconds
-          fastestInterval: 5000, // 5 seconds
-          useSignificantChanges: false
-        }
-      );
-      
-      setWatchId(id);
-      console.log('Live location tracking started with ID:', id);
-    } catch (error) {
-      console.log('Error starting live location:', error);
-    }
-  };
-
-  const stopLiveLocationTracking = () => {
-    if (watchId !== null) {
-      Geolocation.clearWatch(watchId);
-      setWatchId(null);
-      console.log('Live location tracking stopped');
-    }
-  };
-
-  const initializeLocation = async () => {
-    try {
-      const hasPermission = await requestLocationPermission();
-      
-      if (hasPermission) {
-        await getCurrentLocation();
-        startLiveLocationTracking();
-      } else {
-        setLocation({
-          address: "Location permission denied",
-          pincode: "",
-          latitude: null,
-          longitude: null
-        });
-        Alert.alert(
-          'Location Permission Required',
-          'Please enable location permissions in settings to get accurate delivery information.',
-          [{ text: 'OK' }]
-        );
-      }
-    } catch (error) {
-      console.log('Location initialization error:', error);
-      Alert.alert(
-        'Location Error',
-        'Failed to initialize location services. Please check your location settings.',
-        [{ text: 'OK' }]
-      );
-    }
-  };
-
-  const handleChangeLocation = () => {
-    Alert.alert(
-      'Update Location',
-      'Refresh your current location?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Refresh', 
-          onPress: () => {
-            stopLiveLocationTracking();
-            initializeLocation();
-          }
-        }
-      ]
+    setNotifications(prev =>
+      prev.map(n =>
+        n._id === id ? { ...n, read: true } : n
+      )
     );
-  };
 
-  // Improved notification handling
-  const handleShowNotifications = async () => {
-    await fetchAllNotifications();
-    setShowNotifications(true);
-  };
+    setUnreadCount(prev => Math.max(prev - 1, 0));
+  } catch (err) {
+    console.log("Mark read error:", err.message);
+  }
+};
 
-  const handleNotificationPress = (notification) => {
-    markAsRead(notification.id);
-    // Handle notification action based on type
-    if (notification.type === 'product') {
-      navigation.navigate('ProductDetail', { productId: notification.productId });
-    } else if (notification.type === 'order') {
-      navigation.navigate('OrderDetail', { orderId: notification.orderId });
+const markAllAsRead = async () => {
+  try {
+    await axios.patch(`${API_BASE_URL}/notifications/mark-all-read`);
+
+    setNotifications(prev =>
+      prev.map(n => ({ ...n, read: true }))
+    );
+
+    setUnreadCount(0);
+  } catch (err) {
+    console.log("Mark all read error:", err.message);
+  }
+};
+
+const handleShowNotifications = async () => {
+  setShowNotifications(true);
+};
+
+const handleNotificationPress = async (notification) => {
+  if (!notification.read) {
+    await markAsRead(notification._id);
+  }
+
+  setShowNotifications(false);
+
+  // Optional navigation
+  if (notification.type === "order") {
+    navigation.navigate("Orders");
+  }
+};
+useEffect(() => {
+  fetchHomeData();
+  fetchAllNotifications();
+
+  notificationIntervalRef.current = setInterval(fetchAllNotifications, 30000);
+
+  return () => {
+    if (notificationIntervalRef.current) {
+      clearInterval(notificationIntervalRef.current);
     }
-    setShowNotifications(false);
+  };
+}, []);
+
+const NotificationListModal = () => (
+  <Modal
+    visible={showNotifications}
+    transparent={true}
+    animationType="slide"
+  >
+    <View style={styles.modalOverlay}>
+      <View style={styles.notificationsContainer}>
+        {/* Header */}
+        <View style={styles.notificationHeader}>
+          <Text style={styles.notificationTitle}>Notifications</Text>
+          <View style={styles.headerActions}>
+            {notifications.some(n => !n.read) && (
+              <TouchableOpacity 
+                onPress={markAllAsRead}
+                style={styles.markAllButton}
+              >
+                <Text style={styles.markAllText}>Mark all as read</Text>
+              </TouchableOpacity>
+            )}
+            <TouchableOpacity 
+              onPress={() => setShowNotifications(false)}
+              style={styles.closeButton}
+            >
+              <Text style={styles.closeIcon}>✕</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Notifications List */}
+        <ScrollView style={styles.notificationList}>
+          {notifications.length === 0 ? (
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyIcon}>🔔</Text>
+              <Text style={styles.emptyTitle}>No notifications yet</Text>
+              <Text style={styles.emptyText}>We'll notify you when something arrives</Text>
+            </View>
+          ) : (
+            notifications.map((notification) => (
+              <TouchableOpacity
+                key={notification._id}
+                style={[
+                  styles.notificationItem,
+                  !notification.read && styles.unreadNotification
+                ]}
+                onPress={() => handleNotificationPress(notification)}
+              >
+                <View style={styles.notificationIconContainer}>
+                  <Text style={styles.notificationIcon}>
+                    {notification.type === 'order' ? '🛒' :
+                     notification.type === 'promotion' ? '🎉' :
+                     notification.type === 'system' ? '⚙️' : '🔔'}
+                  </Text>
+                </View>
+                
+                <View style={styles.notificationContent}>
+                  <Text style={styles.notificationTitleText}>
+                    {notification.title}
+                  </Text>
+                  <Text style={styles.notificationMessage}>
+                    {notification.message}
+                  </Text>
+                  <Text style={styles.notificationTime}>
+                    {formatNotificationTime(notification.createdAt)}
+                  </Text>
+                </View>
+                
+                {!notification.read && (
+                  <View style={styles.unreadDot} />
+                )}
+              </TouchableOpacity>
+            ))
+          )}
+        </ScrollView>
+      </View>
+    </View>
+  </Modal>
+);
+
+// Add this helper function for time formatting
+const formatNotificationTime = (timestamp) => {
+  const now = new Date();
+  const notificationTime = new Date(timestamp);
+  const diffInMinutes = Math.floor((now - notificationTime) / (1000 * 60));
+  
+  if (diffInMinutes < 1) return 'Just now';
+  if (diffInMinutes < 60) return `${diffInMinutes}m ago`;
+  
+  const diffInHours = Math.floor(diffInMinutes / 60);
+  if (diffInHours < 24) return `${diffInHours}h ago`;
+  
+  const diffInDays = Math.floor(diffInHours / 24);
+  if (diffInDays < 7) return `${diffInDays}d ago`;
+  
+  return notificationTime.toLocaleDateString();
+};
+
+  // ====================== CORE DATA FETCHING & STRUCTURING ======================
+
+  const fetchHomeData = async () => {
+    try {
+      setLoading(true);
+      
+      const productsRes = await axios.get(`${API_BASE_URL}/products`);
+      const fetchedProducts = productsRes.data.products || productsRes.data || [];
+      setAllProducts(fetchedProducts);
+
+      // 2. Filter Global Deals
+      setAllTopSelling(fetchedProducts.filter(p => p.isTopSelling));
+      setAllTodaysDeals(fetchedProducts.filter(p => p.isTodaysDeal));
+      
+      // 3. Fetch All Categories
+      const categoriesRes = await axios.get(`${API_BASE_URL}/categories`);
+      const fetchedCategories = categoriesRes.data || [];
+      setAllCategories(fetchedCategories);
+
+      // Structure main categories and subcategories
+      const mainCategories = fetchedCategories.filter(cat => cat.type === "main");
+      const subCategories = fetchedCategories.filter(cat => cat.type === "sub");
+
+      // Get first two main categories (you can also sort them by order, priority, etc.)
+      const firstMainCategory = mainCategories[0];
+      const secondMainCategory = mainCategories[1];
+
+      // Helper function to structure a category section
+      const structureCategorySection = (mainCategory) => {
+        if (!mainCategory) return null;
+        
+        const categorySubCats = subCategories.filter(sub => 
+          sub.parentCategory?.trim().toLowerCase() === mainCategory.name.trim().toLowerCase() ||
+          sub.parentCategory?.trim().toLowerCase().includes(mainCategory.name.trim().toLowerCase())
+        );
+
+        const categoryProducts = fetchedProducts.filter(p => 
+          p.category?.mainCategory?.trim().toLowerCase() === mainCategory.name.trim().toLowerCase() ||
+          p.category?.mainCategory?.trim().toLowerCase().includes(mainCategory.name.trim().toLowerCase())
+        );
+
+        return {
+          mainCategory: mainCategory,
+          subcategories: categorySubCats,
+          topSelling: categoryProducts.filter(p => p.isTopSelling),
+          todaysDeals: categoryProducts.filter(p => p.isTodaysDeal)
+        };
+      };
+
+      // Structure first category section
+      if (firstMainCategory) {
+        setFirstCategorySection(structureCategorySection(firstMainCategory));
+      }
+
+      // Structure second category section
+      if (secondMainCategory) {
+        setSecondCategorySection(structureCategorySection(secondMainCategory));
+      }
+      
+    } catch (err) {
+      console.log("Home Data Fetch Error:", err);
+      setError("Failed to load home data. Check server status.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
-    const fetchProducts = async () => {
-      try {
-        setLoading(true);
-        const res = await axios.get("https://grocery-c3c0.onrender.com/api/products");
-        setProducts(res.data.products || res.data || []);
-      } catch (err) {
-        setError("Failed to load products");
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchProducts();
-    initializeLocation();
+    fetchHomeData();
     fetchAllNotifications();
 
-    // Set up notification polling (every 30 seconds instead of 10)
     notificationIntervalRef.current = setInterval(fetchAllNotifications, 30000);
 
     return () => {
-      stopLiveLocationTracking();
       if (notificationIntervalRef.current) {
         clearInterval(notificationIntervalRef.current);
       }
     };
   }, []);
 
-  // ====================== IMPROVED NOTIFICATION MODAL ======================
-  const NotificationListModal = () => (
-    <Modal visible={showNotifications} transparent animationType="slide">
-      <View style={styles.modalOverlay}>
-        <View style={styles.notificationsContainer}>
-          <View style={styles.notificationsHeader}>
-            <Text style={styles.notificationsTitle}>Notifications</Text>
-            <View style={styles.notificationsHeaderActions}>
-              {unreadCount > 0 && (
-                <TouchableOpacity onPress={markAllAsRead} style={styles.markAllReadBtn}>
-                  <Text style={styles.markAllReadText}>Mark all read</Text>
-                </TouchableOpacity>
-              )}
-              <TouchableOpacity 
-                style={styles.closeModalBtn} 
-                onPress={() => setShowNotifications(false)}
-              >
-                <Text style={styles.closeModalText}>✕</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+  // --- RENDERING HELPER COMPONENTS ---
 
-          <ScrollView style={styles.notificationsList}>
-            {notifications.length === 0 ? (
-              <View style={styles.emptyNotifications}>
-                <Text style={styles.emptyNotificationsText}>No notifications yet</Text>
-                <Text style={styles.emptyNotificationsSubText}>
-                  We'll notify you about important updates here
+  const renderSubcategoryGrid = (subcategories, mainCategoryName) => {
+    const itemsToRender = subcategories.slice(0, 6); 
+
+    const handleSubcategoryPress = (subCat) => {
+      navigation.navigate('SingleCategory', {
+        categoryId: subCat._id,
+        categoryName: subCat.name
+      });
+    };
+    
+    return (
+      <View style={styles.subcategoryGridContainer}>
+        {itemsToRender.map((subCat, index) => (
+          <TouchableOpacity
+            key={subCat._id}
+            style={styles.subCatCard}
+            onPress={() => handleSubcategoryPress(subCat)}
+          >
+            {/* Square Image Container */}
+            <View style={styles.subCatImageSquareContainer}>
+              {subCat.bannerImage ? (
+                <Image
+                  source={{ uri: subCat.bannerImage }}
+                  style={styles.subCatImageSquare}
+                  resizeMode="cover"
+                />
+              ) : (
+                /* Fallback for no image */
+                <Text style={styles.subCatIconFallback}>
+                  {subCat.icon || subCat.name.charAt(0)}
                 </Text>
-              </View>
-            ) : (
-              notifications.map((notif, idx) => (
-                <TouchableOpacity 
-                  key={notif.id || idx}
-                  style={[
-                    styles.notificationItem,
-                    !notif.read && styles.unreadNotification
-                  ]}
-                  onPress={() => handleNotificationPress(notif)}
-                >
-                  <View style={styles.notificationContent}>
-                    <Text style={styles.notificationMessage}>{notif.message}</Text>
-                    <Text style={styles.notificationTime}>
-                      {notif.timestamp ? new Date(notif.timestamp).toLocaleTimeString() : 'Just now'}
-                    </Text>
-                  </View>
-                  {!notif.read && <View style={styles.unreadDot} />}
-                </TouchableOpacity>
-              ))
-            )}
-          </ScrollView>
+              )}
+            </View>
+            {/* Category Name */}
+            <Text style={styles.subCatName} numberOfLines={1}>
+              {subCat.name}
+            </Text>
+          </TouchableOpacity>
+        ))}
+        {/* Fill empty spots in the 3-column layout */}
+        {itemsToRender.length % 3 !== 0 && 
+          [...Array(3 - (itemsToRender.length % 3))].map((_, i) => (
+            <View key={`filler-${i}`} style={styles.subCatCardFiller} />
+          ))
+        }
+      </View>
+    );
+  };
+  
+  const renderCategorySection = (section, isLast = false) => {
+    if (!section) return null;
+    
+    const displayName = section.mainCategory.name.trim();
+    const categoryNameLower = displayName.toLowerCase();
+
+    return (
+      <View key={section.mainCategory._id} style={[styles.sectionContainer, isLast && styles.lastSection]}>
+        {/* Category Header */}
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>
+            {displayName.charAt(0).toUpperCase() + displayName.slice(1)} Specials
+          </Text>
+          <TouchableOpacity onPress={() => navigateToCategory(section.mainCategory._id)}>
+            <Text style={styles.viewAllText}>View All</Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* 3x2 Subcategory Grid */}
+        {section.subcategories.length > 0 ? (
+          <>
+            {renderSubcategoryGrid(section.subcategories, section.mainCategory.name)}
+          </>
+        ) : (
+          <Text style={styles.noSubcatText}>No subcategories available for {displayName}.</Text>
+        )}
+
+        {/* Top Selling Products from this Category */}
+        {section.topSelling.length > 0 && (
+          <>
+            <ProductGrid 
+              title={`🔥 Top Selling ${displayName}`}
+              products={section.topSelling} 
+            />
+          </>
+        )}
+        
+        {/* Today's Deals from this Category */}
+        {section.todaysDeals.length > 0 && (
+          <>
+            <ProductGrid 
+              title={`⏰ ${displayName} Deals Today`}
+              products={section.todaysDeals} 
+            />
+          </>
+        )}
+        
+        {/* Category-specific Banners */}
+        <View style={styles.bannerCarouselContainer}>
+          <BannerAd 
+            title={`${displayName} Sale`} 
+            subtitle="Great deals available" 
+            backgroundColor="#059669" 
+          />
+          <BannerAd 
+            title={`${displayName} Special`} 
+            subtitle="Limited time offer" 
+            backgroundColor="#F59E0B" 
+          />
         </View>
       </View>
-    </Modal>
-  );
+    );
+  };
+
+  // --- MAIN RENDER ---
 
   if (loading) {
     return (
       <View style={[styles.container, { justifyContent: 'center', alignItems: 'center' }]}>
         <ActivityIndicator size="large" color="#FF9933" />
-        <Text style={{ marginTop: 10, color: '#6B7280' }}>Loading products...</Text>
+        <Text style={{ marginTop: 10, color: '#6B7280' }}>Loading home content...</Text>
       </View>
     );
   }
@@ -376,7 +425,7 @@ export default function HomeScreen() {
     return (
       <View style={[styles.container, { justifyContent: "center", alignItems: "center" }]}>
         <Text style={{ color: "red" }}>{error}</Text>
-        <TouchableOpacity style={styles.retryButton} onPress={() => window.location.reload()}>
+        <TouchableOpacity style={styles.retryButton} onPress={fetchHomeData}>
           <Text style={styles.retryButtonText}>Retry</Text>
         </TouchableOpacity>
       </View>
@@ -385,66 +434,44 @@ export default function HomeScreen() {
 
   return (
     <View style={styles.container}>
-      {/* NOTIFICATION LIST MODAL */}
       <NotificationListModal />
       <HeaderBackground height={180} colors={["#FF9933", "#FF7700"]} patternOpacity={0.1} />
 
       <SafeAreaView style={styles.safeArea}>
+        {/* Header with Left Icons and Right App Name */}
         <View style={styles.header}>
           <View style={styles.headerTop}>
-            <View style={styles.locationSection}>
-              <Text style={styles.locationLabel}>Delivering to</Text>
-              <View style={styles.locationContainer}>
-                <View style={styles.locationTextContainer}>
-                  <Text style={styles.locationIcon}>📍</Text>
-                  <View style={styles.locationInfo}>
-                    {locationLoading ? (
-                      <View style={styles.locationLoading}>
-                        <ActivityIndicator size="small" color="#FFFFFF" />
-                        <Text style={styles.locationText}>Getting location...</Text>
-                      </View>
-                    ) : (
-                      <>
-                        <Text style={styles.locationText} numberOfLines={1}>
-                          {location.address}
-                        </Text>
-                        {location.pincode ? (
-                          <Text style={styles.pincodeText}>Pincode: {location.pincode}</Text>
-                        ) : null}
-                      </>
-                    )}
-                  </View>
-                </View>
-                <TouchableOpacity onPress={handleChangeLocation} disabled={locationLoading}>
-                  <Text style={[styles.changeText, locationLoading && styles.changeTextDisabled]}>
-                    {locationLoading ? 'Updating...' : 'Change'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
+             <View style={styles.rightTitleContainer}>
+              <Text style={styles.appName}>Sampurna</Text>
+              <Text style={styles.appTagline}>Complete Grocery</Text>
             </View>
-            {/* IMPROVED NOTIFICATION BELL ICON */}
-            <TouchableOpacity 
-              style={styles.notificationIcon} 
-              onPress={handleShowNotifications}
-            >
-              <Text style={styles.bellText}>🔔</Text>
-              {unreadCount > 0 && (
-                <View style={styles.badge}>
-                  <Text style={styles.badgeText}>
-                    {unreadCount > 9 ? '9+' : unreadCount}
-                  </Text>
-                </View>
-              )}
-            </TouchableOpacity>
-            {/* USER PROFILE ICON */}
-            <TouchableOpacity style={styles.profileIcon}>
-              <Text style={styles.profileText}>👤</Text>
-            </TouchableOpacity>
-          </View>
+            {/* Left Side: Notification and Profile Icons */}
+            <View style={styles.leftIconsContainer}>
+              <TouchableOpacity 
+                style={styles.notificationIcon} 
+                onPress={handleShowNotifications}
+              >
+                <Text style={styles.bellText}>🔔</Text>
+                {unreadCount > 0 && (
+                  <View style={styles.badge}>
+                    <Text style={styles.badgeText}>{unreadCount > 9 ? '9+' : unreadCount}</Text>
+                  </View>
+                )}
+              </TouchableOpacity>
+              
+              <TouchableOpacity style={styles.profileIcon}>
+                <Text style={styles.profileText}>👤</Text>
+              </TouchableOpacity>
+            </View>
 
+            {/* Right Side: App Name */}
+         
+          </View>
+          
+          {/* Search Bar */}
           <TouchableOpacity 
             style={styles.searchBar}
-            onPress={() => navigation.navigate('SearchScreen', { allProducts: products })}
+            onPress={() => navigation.navigate('SearchScreen', { allProducts: allProducts })}
           >
             <Text style={styles.searchIcon}>🔍</Text>
             <Text style={styles.searchText}>Search for products, brands and more</Text>
@@ -454,27 +481,33 @@ export default function HomeScreen() {
         <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
           <AdvertisementBanner />
           <PromoCarousel />
+          
           <View style={styles.sectionContainer}>
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>Shop by Category</Text>
+              <Text style={styles.sectionTitle}>Explore Categories</Text>
               <View style={styles.headerActions}>
-                
-                  <TouchableOpacity onPress={() => navigation.navigate("category")}>
-      <Text style={styles.viewAllText}>View All</Text>
-    </TouchableOpacity>
+                <TouchableOpacity onPress={() => navigation.navigate("SingleCategory")}>
+                  <Text style={styles.viewAllText}>View All</Text>
+                </TouchableOpacity>
               </View>
             </View>
-            <CategoryGrid showVendorUpload={isVendorMode} currentVendorId={currentVendorId} />
+            <CategoryGrid showVendorUpload={false} currentVendorId={currentVendorId} />
           </View>
-          <BrandSpotlight />
-          <VendorImageGrid title="Featured Vendors" />
-          <ProductGrid title="🛍️ All Products" products={products} />
-          <ProductGrid title="🔥 Today's Deals" products={products} />
-          <ProductGrid title="💥 Hot Deals" products={products} />
-          <ProductGrid title="🥗 Grocery Items" products={products} />
-          <ProductGrid title="🧴 Personal Care Items" products={products} />
-          <ProductGrid title="🧹 Cleaning Essentials" products={products} />
-          <BannerAd title="Mega Sale!" subtitle="Up to 50% off" backgroundColor="#DC2626" />
+
+          {allTopSelling.length > 0 && (
+            <ProductGrid title="🔥 All Top Selling Products" products={allTopSelling} />
+          )}
+
+          {allTodaysDeals.length > 0 && (
+            <ProductGrid title="⏰ All Today's Deals" products={allTodaysDeals} />
+          )}
+
+          <BannerAd title="Weekend Savings!" subtitle="Extra 15% Off on Groceries" backgroundColor="#1D4ED8" />
+
+          {firstCategorySection && renderCategorySection(firstCategorySection)}
+          
+          {secondCategorySection && renderCategorySection(secondCategorySection, true)}
+          
           <SupportSection />
           <View style={{ height: 40 }} />
         </ScrollView>
@@ -482,160 +515,72 @@ export default function HomeScreen() {
     </View>
   );
 }
+const IMAGE_SIZE = 70; // Define a standard image size for the square
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#FAFAFA" },
-  safeArea: { flex: 1 },
-  header: { paddingTop: 20, paddingHorizontal: 20, paddingBottom: 20, zIndex: 10 },
-
-  // =================== IMPROVED NOTIFICATION MODAL STYLES ===================
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'flex-end',
+  container: { 
+    flex: 1, 
+    backgroundColor: "#FAFAFA" 
   },
-  notificationsContainer: {
-    backgroundColor: '#FFFFFF',
-    borderTopLeftRadius: 20,
-    borderTopRightRadius: 20,
-    maxHeight: '80%',
-    minHeight: '40%',
+  safeArea: { 
+    flex: 1 
   },
-  notificationsHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F3F4F6',
-  },
-  notificationsTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#111827',
-  },
-  notificationsHeaderActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  markAllReadBtn: {
-    marginRight: 15,
-  },
-  markAllReadText: {
-    color: '#FF9933',
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  closeModalBtn: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    backgroundColor: '#F3F4F6',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  closeModalText: {
-    fontSize: 16,
-    color: '#6B7280',
-    fontWeight: '600',
-  },
-  notificationsList: {
-    flex: 1,
-  },
-  emptyNotifications: {
-    padding: 40,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyNotificationsText: {
-    fontSize: 16,
-    color: '#6B7280',
-    fontWeight: '600',
-    marginBottom: 8,
-  },
-  emptyNotificationsSubText: {
-    fontSize: 14,
-    color: '#9CA3AF',
-    textAlign: 'center',
-  },
-  notificationItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F9FAFB',
-    backgroundColor: '#FFFFFF',
-  },
-  unreadNotification: {
-    backgroundColor: '#FFFBEB',
-  },
-  notificationContent: {
-    flex: 1,
-    marginRight: 10,
-  },
-  notificationMessage: {
-    fontSize: 14,
-    color: '#374151',
-    lineHeight: 20,
-    marginBottom: 4,
-  },
-  notificationTime: {
-    fontSize: 12,
-    color: '#9CA3AF',
-  },
-  unreadDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: '#FF9933',
-  },
-
-  // =================== EXISTING STYLES ===================
-  headerTop: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 20 },
-  locationSection: { flex: 1, marginRight: 10 },
-  locationLabel: { fontSize: 11, color: "#FFFFFF", opacity: 0.85, marginBottom: 4 },
-  locationContainer: { flexDirection: "row", alignItems: "flex-start", justifyContent: "space-between" },
-  locationTextContainer: { flexDirection: "row", alignItems: "flex-start", flex: 1, marginRight: 10 },
-  locationIcon: { marginRight: 6, marginTop: 2 },
-  locationInfo: { flex: 1 },
-  locationLoading: { flexDirection: 'row', alignItems: 'center' },
-  locationText: { fontSize: 14, fontWeight: "600", color: "#FFFFFF", flex: 1 },
-  pincodeText: { fontSize: 11, color: "#FFFFFF", opacity: 0.8, marginTop: 2 },
-  changeText: { fontSize: 11, color: "#FFFFFF", fontWeight: "500", marginTop: 2 },
-  changeTextDisabled: { opacity: 0.5 },
   
-  // Improved notification icon styles
+  // Header Styles
+  header: { 
+    paddingTop: 20, 
+    paddingHorizontal: 20, 
+    paddingBottom: 20, 
+    zIndex: 10 ,
+    marginTop: 20,
+  },
+  
+  headerTop: { 
+    flexDirection: "row", 
+    justifyContent: "space-between", 
+    alignItems: "flex-start", 
+    marginBottom: 20 
+  },
+  
+  leftIconsContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  
   notificationIcon: { 
     width: 40, 
     height: 40, 
     backgroundColor: "rgba(255,255,255,0.25)", 
     borderRadius: 20, 
     justifyContent: "center", 
-    alignItems: "center",
+    alignItems: "center", 
     marginRight: 10,
-    position: 'relative',
+    position: 'relative' 
   },
-  bellText: { fontSize: 18 },
+  
+  bellText: { 
+    fontSize: 18 
+  },
+  
   badge: {
-    position: 'absolute',
-    top: -2,
-    right: -2,
-    backgroundColor: '#EF4444',
-    borderRadius: 10,
-    minWidth: 18,
-    height: 18,
-    justifyContent: 'center',
-    alignItems: 'center',
-    borderWidth: 2,
+    position: 'absolute', 
+    top: -2, 
+    right: -2, 
+    backgroundColor: '#EF4444', 
+    borderRadius: 10, 
+    minWidth: 18, 
+    height: 18, 
+    justifyContent: 'center', 
+    alignItems: 'center', 
+    borderWidth: 2, 
     borderColor: '#FF9933',
   },
-  badgeText: {
-    color: '#FFFFFF',
-    fontSize: 10,
-    fontWeight: 'bold',
-    paddingHorizontal: 4,
+  
+  badgeText: { 
+    color: '#FFFFFF', 
+    fontSize: 10, 
+    fontWeight: 'bold', 
+    paddingHorizontal: 4 
   },
   
   profileIcon: { 
@@ -646,45 +591,335 @@ const styles = StyleSheet.create({
     justifyContent: "center", 
     alignItems: "center" 
   },
-  profileText: { fontSize: 18 },
-
+  
+  profileText: { 
+    fontSize: 18 
+  },
+  
+  // Right Side: App Name Container
+  rightTitleContainer: {
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+  },
+  
+  appName: {
+    fontSize: 24,
+    fontWeight: '900',
+    color: '#FFFFFF',
+    textShadowColor: 'rgba(0, 0, 0, 0.3)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 2,
+    letterSpacing: 0.5,
+  },
+  
+  appTagline: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: 'rgba(255, 255, 255, 0.9)',
+    marginTop: 2,
+    letterSpacing: 0.5,
+  },
+  
   searchBar: { 
     backgroundColor: "#FFF", 
     borderRadius: 12, 
     paddingHorizontal: 16, 
     paddingVertical: 14, 
     flexDirection: "row", 
-    alignItems: "center",
-    shadowColor: '#000',
+    alignItems: "center", 
+    shadowColor: '#000', 
+    shadowOffset: { width: 0, height: 1 }, 
+    shadowOpacity: 0.1, 
+    shadowRadius: 3, 
+    elevation: 2 
+  },
+  
+  searchIcon: { 
+    fontSize: 16, 
+    marginRight: 12 
+  },
+  
+  searchText: { 
+    fontSize: 13, 
+    color: "#94A3B8" 
+  },
+  
+  scrollContent: { 
+    paddingBottom: 120 
+  },
+  
+  // --- Dynamic Category Styles ---
+  sectionContainer: { 
+    marginTop: 24, 
+    paddingBottom: 10, 
+    borderBottomWidth: 6, 
+    borderBottomColor: '#F0F0F0' 
+  },
+  
+  lastSection: { 
+    borderBottomWidth: 0 
+  }, 
+  
+  sectionHeader: { 
+    flexDirection: "row", 
+    justifyContent: "space-between", 
+    alignItems: "center", 
+    paddingHorizontal: 20, 
+    marginBottom: 12 
+  },
+  
+  sectionTitle: { 
+    fontSize: 20, 
+    fontWeight: "800", 
+    color: "#111827" 
+  },
+  
+  sectionSubTitle: { 
+    fontSize: 16, 
+    fontWeight: "700", 
+    color: "#374151", 
+    paddingHorizontal: 20, 
+    marginBottom: 12, 
+    marginTop: 15 
+  },
+  
+  viewAllText: { 
+    fontSize: 13, 
+    fontWeight: "600", 
+    color: "#FF9933" 
+  },
+  
+  noSubcatText: { 
+    fontSize: 13, 
+    color: '#9CA3AF', 
+    paddingHorizontal: 20, 
+    marginBottom: 10 
+  },
+  
+  // 3x2 Subcategory Grid Styles
+  subcategoryGridContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+    paddingHorizontal: 15, 
+    marginBottom: 10,
+  },
+  
+  subCatCard: {
+    width: CARD_WIDTH,
+    alignItems: 'center',
+    marginBottom: 15, 
+    backgroundColor: '#FFFFFF', 
+    borderRadius: 8, 
+    paddingTop: 5,
+    paddingBottom: 8, 
+    shadowColor: '#000', 
     shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2,
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+    overflow: 'hidden',
   },
-  searchIcon: { fontSize: 16, marginRight: 12 },
-  searchText: { fontSize: 13, color: "#94A3B8" },
+  
+  subCatCardFiller: {
+    width: CARD_WIDTH, 
+    height: 0, 
+  },
 
-  scrollContent: { paddingBottom: 120 },
-  sectionContainer: { marginTop: 24 },
-  sectionHeader: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", paddingHorizontal: 20, marginBottom: 16 },
-  sectionTitle: { fontSize: 17, fontWeight: "700", color: "#111827" },
-  viewAllText: { fontSize: 13, fontWeight: "600", color: "#FF9933" },
-  headerActions: { flexDirection: "row", alignItems: "center" },
-  vendorToggle: { backgroundColor: "#F3F4F6", paddingHorizontal: 12, paddingVertical: 6, borderRadius: 16, marginRight: 12 },
-  vendorToggleActive: { backgroundColor: "#FF9933" },
-  vendorToggleText: { fontSize: 11, fontWeight: "500", color: "#6B7280" },
-  vendorToggleTextActive: { color: "#FFF" },
-
-  // Retry button styles
-  retryButton: {
-    marginTop: 16,
-    backgroundColor: '#FF9933',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
+  // Square container for the image
+  subCatImageSquareContainer: {
+    width: IMAGE_SIZE, 
+    height: IMAGE_SIZE, 
+    backgroundColor: '#F3F4F6', 
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginBottom: 6,
     borderRadius: 8,
+    overflow: 'hidden', 
   },
-  retryButtonText: {
-    color: '#FFFFFF',
+  
+  subCatImageSquare: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'cover',
+  },
+  
+  subCatIconFallback: {
+    fontSize: 28, 
+    color: '#FF9933',
+    fontWeight: 'bold',
+  },
+
+  subCatName: {
+    fontSize: 12,
+    fontWeight: '600', 
+    color: '#1F2937', 
+    textAlign: 'center',
+    lineHeight: 16,
+    paddingHorizontal: 5, 
+  },
+
+  // Banner Container
+  bannerCarouselContainer: {
+    flexDirection: 'column', 
+    paddingHorizontal: 20,
+    gap: 10, 
+    paddingBottom: 15,
+  },
+
+  retryButton: { 
+    marginTop: 16, 
+    backgroundColor: '#FF9933', 
+    paddingHorizontal: 20, 
+    paddingVertical: 10, 
+    borderRadius: 8 
+  },
+  
+  retryButtonText: { 
+    color: '#FFFFFF', 
+    fontWeight: '600' 
+  },
+  
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center'
+  },
+  
+  notificationsContainer: {
+    backgroundColor: 'white',
+    borderRadius: 12,
+    width: '90%',
+    maxHeight: '80%'
+  },
+  
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center'
+  },
+    modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'flex-end',
+  },
+  notificationsContainer: {
+    backgroundColor: 'white',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '80%',
+    minHeight: '40%',
+  },
+  notificationHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f0f0f0',
+  },
+  notificationTitle: {
+    fontSize: 18,
     fontWeight: '600',
+    color: '#333',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  markAllButton: {
+    marginRight: 15,
+  },
+  markAllText: {
+    color: '#FF9933',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  closeButton: {
+    width: 30,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: '#f5f5f5',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  closeIcon: {
+    fontSize: 18,
+    color: '#666',
+  },
+  notificationList: {
+    paddingHorizontal: 15,
+  },
+  notificationItem: {
+    flexDirection: 'row',
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#f8f8f8',
+    alignItems: 'flex-start',
+  },
+  unreadNotification: {
+    backgroundColor: '#FFF9F2',
+  },
+  notificationIconContainer: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    backgroundColor: '#FFF5EB',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  notificationIcon: {
+    fontSize: 24,
+  },
+  notificationContent: {
+    flex: 1,
+  },
+  notificationTitleText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 4,
+  },
+  notificationMessage: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 4,
+    lineHeight: 20,
+  },
+  notificationTime: {
+    fontSize: 12,
+    color: '#999',
+  },
+  unreadDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: '#FF9933',
+    marginLeft: 10,
+    marginTop: 5,
+  },
+  emptyContainer: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 60,
+  },
+  emptyIcon: {
+    fontSize: 60,
+    marginBottom: 15,
+    opacity: 0.5,
+  },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#666',
+    marginBottom: 8,
+  },
+  emptyText: {
+    fontSize: 14,
+    color: '#999',
+    textAlign: 'center',
   },
 });
