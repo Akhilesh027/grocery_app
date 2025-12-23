@@ -15,7 +15,7 @@ import axios from 'axios';
 const { width } = Dimensions.get('window');
 
 // --- Configuration Constants ---
-const API_BASE_URL = "http://31.97.233.212:5000";
+const API_BASE_URL = "https://api.sampurnamart.cloud";
 const API_ENDPOINT = "/api/banners";
 const AUTO_SCROLL_DELAY = 4000;
 const SCROLL_RESTART_DELAY = 2000;

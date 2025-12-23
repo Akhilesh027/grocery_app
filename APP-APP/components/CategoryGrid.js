@@ -41,7 +41,7 @@ export default function CategoryGrid({
    */
   const getCategories = async () => {
     try {
-      const res = await axios.get("http://31.97.233.212:5000/api/categories");
+      const res = await axios.get("https://api.sampurnamart.cloud/api/categories");
 
       // Filter only main categories
       const mainCategories = res.data.filter(cat => cat.type === "main");

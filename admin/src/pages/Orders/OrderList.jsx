@@ -5,7 +5,7 @@ import './OrderList.css';
 import LoyaltyCoinsManager from '../Orders/Loayalitycoins';
 
 // API Service
-const API_BASE_URL = 'http://31.97.233.212:5000/api';
+const API_BASE_URL = 'https://api.sampurnamart.cloud/api';
 
 const orderAPI = {
   fetchOrders: async (page = 0, limit = 10, filters = {}) => {

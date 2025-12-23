@@ -20,7 +20,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 
 const { width } = Dimensions.get('window');
 
-const API_BASE_URL = 'http://31.97.233.212:5000/api';
+const API_BASE_URL = 'https://api.sampurnamart.cloud/api';
 
 export default function SingleCategoryScreen() {
   const route = useRoute();

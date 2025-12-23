@@ -24,7 +24,7 @@ export default function CartScreen() {
   const [modalVisible, setModalVisible] = useState(false);
   const [currentItem, setCurrentItem] = useState(null);
   const [selectedSubtitle, setSelectedSubtitle] = useState(null);
-  const backendURL = "http://31.97.233.212:5000";
+  const backendURL = "https://api.sampurnamart.cloud";
 
   useFocusEffect(
     useCallback(() => {

@@ -4,7 +4,7 @@
     "slug": "sampurna-grocery",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/icon.png",
+    "icon": "./assets/icon.png",
     "scheme": "sampurna",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
@@ -28,7 +28,7 @@
     "web": {
       "bundler": "metro",
       "output": "single",
-      "favicon": "./assets/images/favicon.png"
+      "favicon": "./assets/icon.png"
     },
     "plugins": [
       "expo-router",
@@ -57,7 +57,7 @@
         "origin": false
       },
       "eas": {
-        "projectId": "3bd12022-362f-4241-977b-ed04d0d2bde3"
+        "projectId": "1bcc1a0b-b56e-4b07-bcb0-da24188434a3"
       }
     },
     "runtimeVersion": "1.0.0",

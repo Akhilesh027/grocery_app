@@ -24,7 +24,7 @@ import {
 } from '@mui/icons-material';
 
 // Direct API calls
-const API_BASE_URL = 'http://31.97.233.212:5000/api';
+const API_BASE_URL = 'https://api.sampurnamart.cloud/api';
 
 const fetchDashboardData = async () => {
   try {

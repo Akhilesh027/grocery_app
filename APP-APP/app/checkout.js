@@ -15,7 +15,7 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { ArrowLeft, MapPin, Check, X, Coins, Wallet } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_BASE_URL = 'http://31.97.233.212:5000/api';
+const API_BASE_URL = 'https://api.sampurnamart.cloud/api';
 
 const COLORS = {
   primary: '#00A86B',
@@ -28,6 +28,7 @@ const COLORS = {
   border: '#E5E7EB',
   wallet: '#8B5CF6',
 };
+
 
 // ---------- UTILITIES ----------
 const validators = {
@@ -459,26 +460,41 @@ export default function CheckoutScreen() {
     }
   }
 
-  async function loadAvailableCoupons() {
-    try {
-      setLoadingCoupons(true);
-      const coupons = await api.getAvailableCoupons();
-      
-      const now = new Date();
-      const validCoupons = coupons.filter(coupon => {
-        if (!coupon.active) return false;
-        if (coupon.minOrder && subtotal < coupon.minOrder) return false;
-        return true;
-      });
-      
-      setAvailableCoupons(validCoupons);
-    } catch (err) {
-      console.warn('Load coupons failed:', err.message);
-      setAvailableCoupons([]);
-    } finally {
-      setLoadingCoupons(false);
-    }
+async function loadAvailableCoupons() {
+  try {
+    setLoadingCoupons(true);
+
+    const response = await api.getAvailableCoupons();
+    const coupons = Array.isArray(response) ? response : [];
+
+    const now = new Date();
+    const orderSubtotal = Number(subtotal) || 0;
+
+    const validCoupons = coupons.filter(coupon => {
+      if (!coupon?.active) return false;
+
+      // Expiry check
+      if (coupon.expiresAt && new Date(coupon.expiresAt) < now) {
+        return false;
+      }
+
+      // Minimum order check
+      if (coupon.minOrder && orderSubtotal < coupon.minOrder) {
+        return false;
+      }
+
+      return true;
+    });
+
+    setAvailableCoupons(validCoupons);
+  } catch (err) {
+    console.warn("Load coupons failed:", err?.message || err);
+    setAvailableCoupons([]);
+  } finally {
+    setLoadingCoupons(false);
   }
+}
+
 
   // ---------- OFFER ELIGIBILITY ----------
   const checkOfferEligibility = async () => {

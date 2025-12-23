@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import axios from "axios";
 
 // --- Configuration Constants ---
-const API_BASE_URL = "http://31.97.233.212:5000";
+const API_BASE_URL = "https://api.sampurnamart.cloud";
 
 const BannerList = () => {
   const [banners, setBanners] = useState([]);

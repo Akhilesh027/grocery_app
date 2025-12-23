@@ -26,7 +26,7 @@ export default function ReferralScreen() {
           return;
         }
 
-        const res = await fetch(`http://31.97.233.212:5000/api/referrals/${userId}`);
+        const res = await fetch(`https://api.sampurnamart.cloud/api/referrals/${userId}`);
         const data = await res.json();
 
         if (!res.ok) {

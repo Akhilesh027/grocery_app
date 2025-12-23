@@ -52,7 +52,7 @@ const CategoryManager = () => {
   const fetchCategories = async () => {
     try {
       setLoading(true);
-      const response = await fetch('http://31.97.233.212:5000/api/categories');
+      const response = await fetch('https://api.sampurnamart.cloud/api/categories');
       if (!response.ok) throw new Error('Failed to fetch categories');
       const data = await response.json();
       setCategories(data);
@@ -139,8 +139,8 @@ const CategoryManager = () => {
 
       const method = editingCategory ? 'PUT' : 'POST';
       const url = editingCategory
-        ? `http://31.97.233.212:5000/api/categories/${editingCategory._id}`
-        : 'http://31.97.233.212:5000/api/categories';
+        ? `https://api.sampurnamart.cloud/api/categories/${editingCategory._id}`
+        : 'https://api.sampurnamart.cloud/api/categories';
 
       const response = await fetch(url, {
         method,
@@ -176,7 +176,7 @@ const CategoryManager = () => {
   const handleDelete = async (category) => {
     if (window.confirm(`Delete category "${category.name}"? This action cannot be undone.`)) {
       try {
-        const response = await fetch(`http://31.97.233.212:5000/api/categories/${category._id}`, {
+        const response = await fetch(`https://api.sampurnamart.cloud/api/categories/${category._id}`, {
           method: 'DELETE',
         });
 

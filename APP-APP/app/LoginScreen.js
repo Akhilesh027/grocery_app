@@ -28,7 +28,7 @@ export default function LoginScreen() {
   const [timer, setTimer] = useState(0);
 
   // API Base URL
-  const API_BASE_URL = "http://31.97.233.212:5000/api";
+  const API_BASE_URL = "https://api.sampurnamart.cloud/api";
 
   // Timer effect for OTP resend
   useEffect(() => {
@@ -202,9 +202,15 @@ export default function LoginScreen() {
       behavior={Platform.OS === "ios" ? "padding" : "height"}
       style={styles.container}
     >
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
-        <Text style={styles.welcome}>Welcome,</Text>
-        <Text style={styles.subtitle}>Sign in to Continue</Text>
+      <ScrollView 
+        contentContainerStyle={styles.scrollContainer}
+        showsVerticalScrollIndicator={false}
+        keyboardShouldPersistTaps="handled"
+      >
+        <View style={styles.header}>
+          <Text style={styles.welcome}>Welcome Back</Text>
+          <Text style={styles.subtitle}>Sign in to continue to your account</Text>
+        </View>
 
         {/* Login Method Toggle */}
         <View style={styles.methodToggle}>
@@ -255,50 +261,74 @@ export default function LoginScreen() {
         {loginMethod === "email" ? (
           // Email Login Form
           <>
-            <TextInput
-              placeholder="Email"
-              style={styles.input}
-              value={form.email}
-              onChangeText={(email) => setForm({ ...form, email })}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              editable={!loading}
-            />
-            <TextInput
-              placeholder="Password"
-              secureTextEntry
-              style={styles.input}
-              value={form.password}
-              onChangeText={(password) => setForm({ ...form, password })}
-              editable={!loading}
-            />
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Email Address</Text>
+              <TextInput
+                placeholder="Enter your email"
+                placeholderTextColor="#999"
+                style={styles.input}
+                value={form.email}
+                onChangeText={(email) => setForm({ ...form, email })}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                editable={!loading}
+              />
+            </View>
+
+            <View style={styles.inputContainer}>
+              <Text style={styles.label}>Password</Text>
+              <TextInput
+                placeholder="Enter your password"
+                placeholderTextColor="#999"
+                secureTextEntry
+                style={styles.input}
+                value={form.password}
+                onChangeText={(password) => setForm({ ...form, password })}
+                editable={!loading}
+              />
+            </View>
+
+            <TouchableOpacity 
+              style={styles.forgotPassword}
+              disabled={loading}
+            >
+              <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+            </TouchableOpacity>
           </>
         ) : (
           // Mobile Login Form
           <>
             {step === 1 ? (
               <>
-                <TextInput
-                  placeholder="Mobile Number"
-                  style={styles.input}
-                  value={form.mobile}
-                  onChangeText={(mobile) => setForm({ ...form, mobile })}
-                  keyboardType="phone-pad"
-                  maxLength={10}
-                  editable={!loading}
-                />
+                <View style={styles.inputContainer}>
+                  <Text style={styles.label}>Mobile Number</Text>
+                  <TextInput
+                    placeholder="10-digit mobile number"
+                    placeholderTextColor="#999"
+                    style={styles.input}
+                    value={form.mobile}
+                    onChangeText={(mobile) => setForm({ ...form, mobile })}
+                    keyboardType="phone-pad"
+                    maxLength={10}
+                    editable={!loading}
+                  />
+                </View>
                 <Text style={styles.mobileHint}>
-                  We'll send an OTP to this number
+                  We'll send an OTP to this number for verification
                 </Text>
               </>
             ) : (
               <>
-                <Text style={styles.otpTitle}>Enter OTP</Text>
-                <Text style={styles.otpSubtitle}>
-                  Sent to +91 {form.mobile}
-                </Text>
+                <View style={styles.otpHeader}>
+                  <Text style={styles.otpTitle}>Verify OTP</Text>
+                  <Text style={styles.otpSubtitle}>
+                    OTP sent to +91 {form.mobile}
+                  </Text>
+                </View>
+
                 <TextInput
                   placeholder="Enter 4-digit OTP"
+                  placeholderTextColor="#999"
                   style={styles.otpInput}
                   value={form.otp}
                   onChangeText={(otp) => setForm({ ...form, otp })}
@@ -307,22 +337,32 @@ export default function LoginScreen() {
                   autoFocus
                   editable={!loading}
                 />
-                <TouchableOpacity onPress={resendOTP} disabled={timer > 0 || loading}>
-                  <Text style={[styles.resendText, (timer > 0 || loading) && styles.resendDisabled]}>
-                    {timer > 0
-                      ? `Resend OTP in ${timer}s`
-                      : "Resend OTP"}
-                  </Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  onPress={() => setStep(1)}
-                  style={styles.changeNumberButton}
-                  disabled={loading}
-                >
-                  <Text style={styles.changeNumberText}>
-                    Change Mobile Number
-                  </Text>
-                </TouchableOpacity>
+
+                <View style={styles.otpActions}>
+                  <TouchableOpacity 
+                    onPress={resendOTP} 
+                    disabled={timer > 0 || loading}
+                    style={timer > 0 && styles.resendDisabled}
+                  >
+                    <Text style={[
+                      styles.resendText, 
+                      (timer > 0 || loading) && styles.resendDisabledText
+                    ]}>
+                      {timer > 0
+                        ? `Resend OTP in ${timer}s`
+                        : "Resend OTP"}
+                    </Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={() => setStep(1)}
+                    disabled={loading}
+                  >
+                    <Text style={styles.changeNumberText}>
+                      Change Number
+                    </Text>
+                  </TouchableOpacity>
+                </View>
               </>
             )}
           </>
@@ -346,24 +386,35 @@ export default function LoginScreen() {
           )}
         </TouchableOpacity>
 
-        <Text style={styles.or}>- OR -</Text>
+        <View style={styles.dividerContainer}>
+          <View style={styles.divider} />
+          <Text style={styles.or}>OR</Text>
+          <View style={styles.divider} />
+        </View>
 
-        <TouchableOpacity style={styles.socialButton} disabled={loading}>
-          <Text>Sign In with Facebook</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.socialButton} disabled={loading}>
-          <Text>Sign In with Google</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          onPress={() => navigation.navigate("SignupScreen")}
-          style={styles.signupLink}
+        <TouchableOpacity 
+          style={[styles.socialButton, styles.facebookButton]} 
           disabled={loading}
         >
-          <Text style={styles.signupText}>
-            Don't have an account? Sign Up
-          </Text>
+          <Text style={styles.socialButtonText}>Continue with Facebook</Text>
         </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={[styles.socialButton, styles.googleButton]} 
+          disabled={loading}
+        >
+          <Text style={styles.socialButtonText}>Continue with Google</Text>
+        </TouchableOpacity>
+
+        <View style={styles.signupContainer}>
+          <Text style={styles.signupText}>Don't have an account? </Text>
+          <TouchableOpacity
+            onPress={() => navigation.navigate("SignupScreen")}
+            disabled={loading}
+          >
+            <Text style={styles.signupLink}>Sign Up</Text>
+          </TouchableOpacity>
+        </View>
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -376,128 +427,212 @@ const styles = StyleSheet.create({
   },
   scrollContainer: {
     flexGrow: 1,
-    padding: 20,
-    justifyContent: "center",
+    paddingHorizontal: 24,
+    paddingTop: 40,
+    paddingBottom: 20,
+  },
+  header: {
+    marginBottom: 32,
   },
   welcome: {
     fontSize: 32,
     fontWeight: "bold",
-    marginBottom: 5,
+    color: "#1a1a1a",
+    marginBottom: 8,
   },
   subtitle: {
     fontSize: 16,
     color: "#666",
-    marginBottom: 30,
   },
   methodToggle: {
     flexDirection: "row",
     backgroundColor: "#f5f5f5",
-    borderRadius: 10,
+    borderRadius: 12,
     padding: 4,
-    marginBottom: 20,
+    marginBottom: 24,
   },
   toggleButton: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 8,
+    paddingVertical: 14,
+    borderRadius: 10,
     alignItems: "center",
   },
   toggleActive: {
     backgroundColor: "#007AFF",
+    elevation: 2,
+    shadowColor: "#007AFF",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 3,
   },
   toggleText: {
     color: "#666",
     fontWeight: "500",
+    fontSize: 14,
   },
   toggleTextActive: {
     color: "#fff",
     fontWeight: "600",
   },
+  inputContainer: {
+    marginBottom: 20,
+  },
+  label: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: "#333",
+    marginBottom: 8,
+    marginLeft: 4,
+  },
   input: {
     borderWidth: 1,
-    borderColor: "#ddd",
-    padding: 15,
-    borderRadius: 10,
-    marginBottom: 15,
+    borderColor: "#e0e0e0",
+    backgroundColor: "#fafafa",
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 12,
     fontSize: 16,
+    color: "#333",
+    elevation: 1,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+  },
+  forgotPassword: {
+    alignSelf: "flex-end",
+    marginBottom: 24,
+  },
+  forgotPasswordText: {
+    color: "#007AFF",
+    fontSize: 14,
+    fontWeight: "500",
   },
   mobileHint: {
-    fontSize: 12,
+    fontSize: 13,
     color: "#666",
-    marginBottom: 20,
     textAlign: "center",
+    marginTop: -8,
+    marginBottom: 24,
+  },
+  otpHeader: {
+    alignItems: "center",
+    marginBottom: 32,
   },
   otpTitle: {
-    fontSize: 20,
+    fontSize: 28,
     fontWeight: "bold",
-    textAlign: "center",
-    marginBottom: 5,
+    color: "#1a1a1a",
+    marginBottom: 8,
   },
   otpSubtitle: {
-    textAlign: "center",
+    fontSize: 16,
     color: "#666",
-    marginBottom: 20,
-    fontSize: 14,
+    textAlign: "center",
   },
   otpInput: {
     borderWidth: 2,
     borderColor: "#007AFF",
-    padding: 15,
-    borderRadius: 10,
-    fontSize: 18,
+    backgroundColor: "#f0f8ff",
+    padding: 18,
+    borderRadius: 12,
+    fontSize: 24,
+    fontWeight: "bold",
     textAlign: "center",
-    letterSpacing: 10,
-    marginBottom: 10,
+    letterSpacing: 8,
+    color: "#1a1a1a",
+    marginBottom: 20,
+  },
+  otpActions: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 32,
+    paddingHorizontal: 4,
   },
   resendText: {
-    textAlign: "center",
     color: "#007AFF",
-    marginBottom: 15,
+    fontSize: 14,
+    fontWeight: "600",
+  },
+  resendDisabledText: {
+    color: "#999",
   },
   resendDisabled: {
-    color: "#ccc",
-  },
-  changeNumberButton: {
-    alignItems: "center",
-    marginBottom: 20,
+    opacity: 0.5,
   },
   changeNumberText: {
     color: "#666",
+    fontSize: 14,
   },
   button: {
     backgroundColor: "#007AFF",
-    padding: 16,
-    borderRadius: 10,
+    padding: 18,
+    borderRadius: 12,
     alignItems: "center",
-    marginTop: 10,
+    marginVertical: 8,
+    elevation: 2,
+    shadowColor: "#007AFF",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
   },
   buttonDisabled: {
     backgroundColor: "#ccc",
+    shadowOpacity: 0,
   },
   buttonText: {
     color: "#fff",
     fontSize: 16,
     fontWeight: "600",
   },
+  dividerContainer: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginVertical: 24,
+  },
+  divider: {
+    flex: 1,
+    height: 1,
+    backgroundColor: "#e0e0e0",
+  },
   or: {
-    textAlign: "center",
+    paddingHorizontal: 16,
     color: "#666",
-    marginVertical: 20,
+    fontSize: 14,
   },
   socialButton: {
+    padding: 16,
+    borderRadius: 12,
+    alignItems: "center",
+    marginBottom: 12,
     borderWidth: 1,
-    borderColor: "#ddd",
-    padding: 15,
-    borderRadius: 10,
-    alignItems: "center",
-    marginBottom: 10,
   },
-  signupLink: {
-    marginTop: 30,
+  facebookButton: {
+    backgroundColor: "#1877F2",
+    borderColor: "#1877F2",
+  },
+  googleButton: {
+    backgroundColor: "#fff",
+    borderColor: "#ddd",
+  },
+  socialButtonText: {
+    fontSize: 16,
+    fontWeight: "500",
+  },
+  signupContainer: {
+    flexDirection: "row",
+    justifyContent: "center",
     alignItems: "center",
+    marginTop: 32,
   },
   signupText: {
+    color: "#666",
+    fontSize: 14,
+  },
+  signupLink: {
     color: "#007AFF",
-    fontWeight: "500",
+    fontSize: 14,
+    fontWeight: "600",
   },
 });

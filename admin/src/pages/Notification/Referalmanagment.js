@@ -8,7 +8,7 @@ const ReferralManagement = () => {
 
   const fetchReferrals = async () => {
     try {
-      const res = await axios.get("http://31.97.233.212:5000/api/referrals");
+      const res = await axios.get("https://api.sampurnamart.cloud/api/referrals");
       setReferrals(res.data.referrals || []);
       setLoading(false);
     } catch (err) {
@@ -19,7 +19,7 @@ const ReferralManagement = () => {
 
   const updateCoins = async (id, newCoins) => {
     try {
-      await axios.patch(`http://31.97.233.212:5000/api/referrals/${id}/update-coins`, {
+      await axios.patch(`https://api.sampurnamart.cloud/api/referrals/${id}/update-coins`, {
         rewardCoins: newCoins,
       });
       alert("Coins updated successfully");
@@ -32,7 +32,7 @@ const ReferralManagement = () => {
 
   const updateStatus = async (id, status) => {
     try {
-      await axios.patch(`http://31.97.233.212:5000/api/referrals/${id}/update-status`, {
+      await axios.patch(`https://api.sampurnamart.cloud/api/referrals/${id}/update-status`, {
         status,
       });
       alert("Status updated");

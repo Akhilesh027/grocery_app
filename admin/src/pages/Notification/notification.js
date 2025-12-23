@@ -8,7 +8,7 @@ const AddNotification = () => {
 
   const fetchNotifications = async () => {
     try {
-      const res = await axios.get("http://31.97.233.212:5000/api/notifications/latest");
+      const res = await axios.get("https://api.sampurnamart.cloud/api/notifications/latest");
       const data = res.data.notification || res.data.notifications || [];
       setNotifications(Array.isArray(data) ? data : [data]);
     } catch (err) {
@@ -21,7 +21,7 @@ const AddNotification = () => {
     if (!message.trim()) return alert("Please enter a message");
 
     try {
-      await axios.post("http://31.97.233.212:5000/api/notification", { message });
+      await axios.post("https://api.sampurnamart.cloud/api/notification", { message });
       alert("Notification sent!");
       setMessage("");
       fetchNotifications();
@@ -33,7 +33,7 @@ const AddNotification = () => {
   // Delete Single Notification
   const deleteNotification = async (id) => {
     try {
-      await axios.delete(`http://31.97.233.212:5000/api/notifications/${id}`);
+      await axios.delete(`https://api.sampurnamart.cloud/api/notifications/${id}`);
       setNotifications(prev => prev.filter(n => n._id !== id));
     } catch (err) {
       console.error("Delete error", err);
@@ -43,7 +43,7 @@ const AddNotification = () => {
   // Delete ALL Notifications
   const deleteAllNotifications = async () => {
     try {
-      await axios.delete("http://31.97.233.212:5000/api/notifications");
+      await axios.delete("https://api.sampurnamart.cloud/api/notifications");
       setNotifications([]);
     } catch (err) {
       console.error("Delete all error", err);

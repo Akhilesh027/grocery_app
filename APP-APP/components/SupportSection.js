@@ -29,7 +29,7 @@ export default function SupportSection() {
           </View>
           <View style={styles.textContainer}>
             <Text style={styles.supportTitle}>Call Us</Text>
-            <Text style={styles.supportText}>+91 98765 43210</Text>
+            <Text style={styles.supportText}>+91 8686044545</Text>
             <Text style={styles.supportSubtext}>Available 24/7</Text>
           </View>
         </TouchableOpacity>
@@ -48,7 +48,7 @@ export default function SupportSection() {
 
       <View style={styles.additionalInfo}>
         <Text style={styles.infoTitle}>Other Ways to Reach Us:</Text>
-        <Text style={styles.infoText}>• Email: support@dmartgrocery.com</Text>
+        <Text style={styles.infoText}>• Email: support@Sampurna.com</Text>
         <Text style={styles.infoText}>• Live Chat: Available on website</Text>
         <Text style={styles.infoText}>• Store Locator: Find nearest store</Text>
       </View>

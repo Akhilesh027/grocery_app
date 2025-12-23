@@ -14,7 +14,7 @@ import axios from 'axios';
 const { width: screenWidth } = Dimensions.get('window');
 
 // --- Configuration ---
-const API_BASE_URL = "http://31.97.233.212:5000";
+const API_BASE_URL = "https://api.sampurnamart.cloud";
 const AUTO_SCROLL_DELAY = 5000; // 5 seconds
 const AUTOSCROLL_TRANSITION_TIME = 3000; // 3 seconds before restarting scroll
 

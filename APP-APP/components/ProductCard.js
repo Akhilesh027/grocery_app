@@ -49,7 +49,7 @@ if (!userId) {
       quantity: 1,
     };
 
-    const response = await axios.post("http://31.97.233.212:5000/api/cart", payload);
+    const response = await axios.post("https://api.sampurnamart.cloud/api/cart", payload);
 
     if (response.data.success) {
       Alert.alert("Added!", `${product.title} has been added to your cart.`);

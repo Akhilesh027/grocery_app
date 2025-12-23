@@ -1,7 +1,7 @@
 // AdminOffersScreen.js
 import React, { useState, useEffect } from 'react';
 
-const API_BASE_URL = 'http://31.97.233.212:5000/api'; // Changed to localhost for web
+const API_BASE_URL = 'https://api.sampurnamart.cloud/api'; // Changed to localhost for web
 
 export default function AdminOffersScreen() {
   const [activeTab, setActiveTab] = useState('dashboard');

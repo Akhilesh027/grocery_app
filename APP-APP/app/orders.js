@@ -34,7 +34,7 @@ import {
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_BASE_URL = 'http://31.97.233.212:5000/api';
+const API_BASE_URL = 'https://api.sampurnamart.cloud/api';
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
 
 // Define colors properly

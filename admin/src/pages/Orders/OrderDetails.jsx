@@ -52,7 +52,7 @@ import {
 import { useNavigate, useParams } from 'react-router-dom';
 
 // Direct API calls
-const API_BASE_URL = 'http://31.97.233.212:5000/api';
+const API_BASE_URL = 'https://api.sampurnamart.cloud/api';
 
 const fetchOrderDetails = async (orderId) => {
   try {

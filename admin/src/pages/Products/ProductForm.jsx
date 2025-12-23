@@ -84,8 +84,8 @@ const ProductForm = () => {
   const fetchCategories = async () => {
     try {
       const [categoriesRes, offerCategoriesRes] = await Promise.all([
-        fetch('http://31.97.233.212:5000/api/categories'),
-        fetch('http://31.97.233.212:5000/api/offers/categories')
+        fetch('https://api.sampurnamart.cloud/api/categories'),
+        fetch('https://api.sampurnamart.cloud/api/offers/categories')
       ]);
       
       if (!categoriesRes.ok) throw new Error('Failed to fetch categories');
@@ -110,7 +110,7 @@ const ProductForm = () => {
     }
     
     try {
-      const response = await fetch(`http://31.97.233.212:5000/api/offers/subcategories/${offerCategoryId}`);
+      const response = await fetch(`https://api.sampurnamart.cloud/api/offers/subcategories/${offerCategoryId}`);
       if (!response.ok) throw new Error('Failed to fetch offer subcategories');
       const data = await response.json();
       setOfferSubCategories(data);
@@ -125,7 +125,7 @@ const ProductForm = () => {
     
     try {
       setLoading(true);
-      const response = await fetch(`http://31.97.233.212:5000/api/products/${id}`);
+      const response = await fetch(`https://api.sampurnamart.cloud/api/products/${id}`);
       if (!response.ok) throw new Error('Failed to fetch product');
       const productData = await response.json();
       
@@ -323,7 +323,7 @@ const ProductForm = () => {
       formData.append('images', file);
     });
 
-    const url = isEdit ? `http://31.97.233.212:5000/api/products/${id}` : 'http://31.97.233.212:5000/api/products';
+    const url = isEdit ? `https://api.sampurnamart.cloud/api/products/${id}` : 'https://api.sampurnamart.cloud/api/products';
     const method = isEdit ? 'PUT' : 'POST';
 
     console.log('Submitting form data...');

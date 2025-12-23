@@ -18,7 +18,7 @@ import {
 import { Add as AddIcon, Edit as EditIcon, Delete as DeleteIcon } from "@mui/icons-material";
 import axios from "axios";
 
-const API_URL = "http://31.97.233.212:5000/api/zones";
+const API_URL = "https://api.sampurnamart.cloud/api/zones";
 
 const ZoneManager = () => {
   const [openDialog, setOpenDialog] = useState(false);

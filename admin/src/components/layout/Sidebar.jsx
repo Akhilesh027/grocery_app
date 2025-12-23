@@ -10,18 +10,27 @@ import {
   Box,
   Typography,
 } from '@mui/material';
+
 import {
-  Dashboard as DashboardIcon,
-  Inventory as InventoryIcon,
-  ShoppingCart as OrdersIcon,
-  LocalShipping as LogisticsIcon,
-  Assessment as ReportsIcon,
+  Dashboard,
+  Inventory2,
+  Storefront,
+  Category,
+  ReceiptLong,
+  Notifications,
+  LocalOffer,
+  GroupAdd,
+  LocalShipping,
+  Map,
+  Campaign,
+  Collections,
+  AddPhotoAlternate,
+  PhotoLibrary,
+  BarChart,
   ExpandLess,
   ExpandMore,
-  Image as ImageIcon,
-  AddPhotoAlternate as AddBannerIcon,
-  PhotoLibrary as BannerListIcon,
 } from '@mui/icons-material';
+
 import { useNavigate, useLocation } from 'react-router-dom';
 
 const drawerWidth = 280;
@@ -34,93 +43,93 @@ const Sidebar = () => {
   const [logisticsOpen, setLogisticsOpen] = useState(false);
   const [bannerOpen, setBannerOpen] = useState(false);
 
+  const isActive = (path) => location.pathname === path;
+
   const menuItems = [
     {
       text: 'Dashboard',
-      icon: <DashboardIcon />,
+      icon: <Dashboard />,
       path: '/dashboard',
     },
     {
       text: 'Products & Inventory',
-      icon: <InventoryIcon />,
+      icon: <Inventory2 />,
       children: [
-        { text: 'All Products', path: '/products' },
-        { text: 'Categories', path: '/products/categories' },
+        { text: 'All Products', path: '/products', icon: <Storefront /> },
+        { text: 'Categories', path: '/products/categories', icon: <Category /> },
       ],
     },
     {
       text: 'Order Management',
-      icon: <OrdersIcon />,
+      icon: <ReceiptLong />,
       path: '/orders',
     },
-     {
+    {
       text: 'Notifications',
-      icon: <OrdersIcon />,
+      icon: <Notifications />,
       path: '/notification',
     },
     {
       text: 'Coupon Management',
-      icon: <OrdersIcon />,
+      icon: <LocalOffer />,
       path: '/coupon',
     },
-     {
-      text: 'Referal management',
-      icon: <OrdersIcon />,
+    {
+      text: 'Referral Management',
+      icon: <GroupAdd />,
       path: '/referal',
     },
     {
       text: 'Logistics & Delivery',
-      icon: <LogisticsIcon />,
+      icon: <LocalShipping />,
       children: [
-        { text: 'Service Zones', path: '/logistics/zones' },
-        { text: 'Offers management', path: '/logistics/staff' },
+        { text: 'Service Zones', path: '/logistics/zones', icon: <Map /> },
+        { text: 'Offers Management', path: '/logistics/staff', icon: <Campaign /> },
       ],
     },
-
-    // ✅ ADDED BANNER SECTION
     {
       text: 'Banners',
-      icon: <ImageIcon />,
+      icon: <Collections />,
       children: [
-        { text: 'Add Banner', path: '/banner/add' },
-        { text: 'Banner List', path: '/banner' },
+        { text: 'Add Banner', path: '/banner/add', icon: <AddPhotoAlternate /> },
+        { text: 'Banner List', path: '/banner', icon: <PhotoLibrary /> },
       ],
     },
-
     {
       text: 'Reports & Analytics',
-      icon: <ReportsIcon />,
+      icon: <BarChart />,
       path: '/reports/sales',
     },
   ];
-
-  const isActive = (path) => location.pathname === path;
 
   return (
     <Drawer
       variant="permanent"
       sx={{
         width: drawerWidth,
-        flexShrink: 0,
         '& .MuiDrawer-paper': {
           width: drawerWidth,
-          boxSizing: 'border-box',
           backgroundColor: '#1a237e',
-          color: 'white',
+          color: '#fff',
         },
       }}
     >
       <Box sx={{ p: 2, textAlign: 'center' }}>
-        <Typography variant="h6" sx={{ fontWeight: 'bold', color: 'white' }}>
+        <Typography variant="h6" fontWeight="bold">
           🛒 Grocery Admin
         </Typography>
       </Box>
 
       <List sx={{ px: 1 }}>
         {menuItems.map((item) => {
-          const isBanner = item.text === 'Banners';
           const isProducts = item.text === 'Products & Inventory';
           const isLogistics = item.text === 'Logistics & Delivery';
+          const isBanner = item.text === 'Banners';
+
+          const open =
+            isProducts ? productsOpen :
+            isLogistics ? logisticsOpen :
+            bannerOpen;
 
           return (
             <React.Fragment key={item.text}>
@@ -130,7 +139,7 @@ const Sidebar = () => {
                     onClick={() => {
                       if (isProducts) setProductsOpen(!productsOpen);
                       else if (isLogistics) setLogisticsOpen(!logisticsOpen);
-                      else if (isBanner) setBannerOpen(!bannerOpen);
+                      else setBannerOpen(!bannerOpen);
                     }}
                     sx={{
                       borderRadius: 2,
@@ -138,30 +147,14 @@ const Sidebar = () => {
                       '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' },
                     }}
                   >
-                    <ListItemIcon sx={{ color: 'white', minWidth: 40 }}>
+                    <ListItemIcon sx={{ color: '#fff' }}>
                       {item.icon}
                     </ListItemIcon>
-
                     <ListItemText primary={item.text} />
-
-                    {isProducts
-                      ? productsOpen ? <ExpandLess /> : <ExpandMore />
-                      : isLogistics
-                      ? logisticsOpen ? <ExpandLess /> : <ExpandMore />
-                      : bannerOpen ? <ExpandLess /> : <ExpandMore />}
+                    {open ? <ExpandLess /> : <ExpandMore />}
                   </ListItemButton>
 
-                  <Collapse
-                    in={
-                      isProducts
-                        ? productsOpen
-                        : isLogistics
-                        ? logisticsOpen
-                        : bannerOpen
-                    }
-                    timeout="auto"
-                    unmountOnExit
-                  >
+                  <Collapse in={open} timeout="auto" unmountOnExit>
                     <List component="div" disablePadding>
                       {item.children.map((child) => (
                         <ListItemButton
@@ -170,13 +163,15 @@ const Sidebar = () => {
                           sx={{
                             pl: 4,
                             borderRadius: 2,
-                            mb: 0.5,
                             backgroundColor: isActive(child.path)
                               ? 'rgba(255,255,255,0.2)'
                               : 'transparent',
                             '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' },
                           }}
                         >
+                          <ListItemIcon sx={{ color: '#fff', minWidth: 36 }}>
+                            {child.icon}
+                          </ListItemIcon>
                           <ListItemText primary={child.text} />
                         </ListItemButton>
                       ))}
@@ -195,7 +190,7 @@ const Sidebar = () => {
                     '&:hover': { backgroundColor: 'rgba(255,255,255,0.1)' },
                   }}
                 >
-                  <ListItemIcon sx={{ color: 'white', minWidth: 40 }}>
+                  <ListItemIcon sx={{ color: '#fff' }}>
                     {item.icon}
                   </ListItemIcon>
                   <ListItemText primary={item.text} />

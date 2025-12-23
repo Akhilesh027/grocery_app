@@ -49,7 +49,7 @@ import {
   Info,
 } from '@mui/icons-material';
 
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://31.97.233.212:5000/api';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'https://api.sampurnamart.cloud/api';
 
 const SalesReport = () => {
   const [loading, setLoading] = useState(true);

@@ -38,12 +38,12 @@ const SearchScreen = () => {
         setLoading(true);
         
         // Fetch products
-        const productsRes = await axios.get('http://31.97.233.212:5000/api/products');
+        const productsRes = await axios.get('https://api.sampurnamart.cloud/api/products');
         const productsData = productsRes.data.products || productsRes.data || [];
         setProducts(productsData);
         
         // Fetch categories from backend API
-        const categoriesRes = await axios.get('http://31.97.233.212:5000/api/categories');
+        const categoriesRes = await axios.get('https://api.sampurnamart.cloud/api/categories');
         const categoriesData = categoriesRes.data.categories || categoriesRes.data || [];
         
         // Transform backend categories data based on your structure
@@ -176,7 +176,7 @@ const SearchScreen = () => {
         quantity: 1,
       };
 
-      const response = await axios.post("http://31.97.233.212:5000/api/cart", payload);
+      const response = await axios.post("https://api.sampurnamart.cloud/api/cart", payload);
 
       if (response.data.success) {
         Alert.alert("Added!", `${product.title} has been added to your cart.`);

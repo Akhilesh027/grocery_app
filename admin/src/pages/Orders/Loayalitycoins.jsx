@@ -35,7 +35,7 @@ const LoyaltyCoinsManager = ({ open, onClose, order, user, onUpdate }) => {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
 
-  const API_BASE_URL = 'http://31.97.233.212:5000/api';
+  const API_BASE_URL = 'https://api.sampurnamart.cloud/api';
 
   const predefinedReasons = [
     'Customer service compensation',

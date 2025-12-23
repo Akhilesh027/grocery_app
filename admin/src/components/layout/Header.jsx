@@ -29,17 +29,6 @@ const Header = () => {
           Grocery Admin Panel
         </Typography>
         
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-          <IconButton color="inherit">
-            <Badge badgeContent={4} color="error">
-              <NotificationsIcon />
-            </Badge>
-          </IconButton>
-          
-          <IconButton color="inherit">
-            <AccountCircle />
-          </IconButton>
-        </Box>
       </Toolbar>
     </AppBar>
   );

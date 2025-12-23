@@ -17,7 +17,7 @@ import { useNavigation } from "@react-navigation/native";
 import { useCategoryNavigation } from '../context/CategoryNavigationContext';
 
 const { width } = Dimensions.get('window');
-const API_BASE_URL = 'http://31.97.233.212:5000/api';
+const API_BASE_URL = 'https://api.sampurnamart.cloud/api';
 const CARD_WIDTH = (width - 60) / 3; 
 
 export default function HomeScreen() {
